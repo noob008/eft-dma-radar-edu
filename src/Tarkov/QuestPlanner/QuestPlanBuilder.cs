@@ -1,5 +1,4 @@
 using System.Collections.Frozen;
-using System.Diagnostics;
 using eft_dma_radar.Tarkov.QuestPlanner.Models;
 using eft_dma_radar.Common.Misc.Data.TarkovMarket;
 using eft_dma_radar.UI.Misc;
@@ -182,15 +181,7 @@ public static class QuestPlanBuilder
 
             // Quest-level map override: if the quest has a map field, use it instead of objective sub-locations.
             // This prevents "The Labyrinth" from overriding the quest's actual map "Customs".
-            List<BasicDataElement> effectiveMaps;
-            if (task.Map != null)
-            {
-                effectiveMaps = new List<BasicDataElement> { task.Map };
-            }
-            else
-            {
-                effectiveMaps = obj.Maps;
-            }
+            var effectiveMaps = task.Map != null ? (IEnumerable<BasicDataElement>)[task.Map] : obj.Maps;
 
             foreach (var map in effectiveMaps)
             {
@@ -395,7 +386,6 @@ public static class QuestPlanBuilder
         // Use priority queue: fewer incoming edges first, then more quests as tiebreaker
         var result = new List<MapScore>();
         var remaining = ranked.ToDictionary(m => m.MapId, StringComparer.OrdinalIgnoreCase);
-        var mapByCount = ranked.ToDictionary(m => m.MapId, m => m.QuestIds.Count);
 
         while (remaining.Count > 0)
         {
@@ -403,7 +393,7 @@ public static class QuestPlanBuilder
             var minDegree = remaining.Keys.Min(k => inDegree[k]);
             var candidates = remaining.Keys
                 .Where(k => inDegree[k] == minDegree)
-                .OrderByDescending(k => mapByCount[k])
+                .OrderByDescending(k => remaining[k].QuestIds.Count)
                 .ToList();
 
             // Pick the one with most quests
@@ -466,22 +456,14 @@ public static class QuestPlanBuilder
         // Build QuestPlan for each task
         var result = new List<QuestPlan>();
 
-        // Need task names from completableObjectives
-        var taskNames = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var (task, obj) in completableObjectives)
-        {
-            if (!taskNames.ContainsKey(task.Id))
-                taskNames[task.Id] = task.Name;
-        }
-
         foreach (var (taskId, objectives) in objectivesByTask)
         {
-            var taskName = taskNames.GetValueOrDefault(taskId, taskId);
+            var taskName = taskRefById.GetValueOrDefault(taskId)?.Name ?? taskId;
             var bringItems = BuildBringListForQuest(objectives, taskName);
 
             // Build findQuestItem pairing lookup from ALL task objectives (not just map-filtered ones)
             var taskRef = taskRefById.GetValueOrDefault(taskId);
-            var allObjectives = taskRef?.Objectives ?? new List<TaskElement.ObjectiveElement>();
+            var allObjectives = taskRef?.Objectives ?? [];
             var findLookup = allObjectives
                 .Where(o => o.Type == "findQuestItem" && o.QuestItem != null)
                 .ToDictionary(o => o.QuestItem!.Id, o => o.Id, StringComparer.Ordinal);
@@ -582,25 +564,14 @@ public static class QuestPlanBuilder
             // INCLUDE: giveQuestItem, plant (hand over or place)
             // EXCLUDE: findQuestItem (must find in raid)
             // EXCLUDE: plantItem (handled above with QuestItem check)
-            if (obj.QuestItem != null && obj.Type != "plantItem")
+            if (obj.QuestItem != null && obj.Type is "giveQuestItem" or "plant" or "giveItem")
             {
-                var include = obj.Type switch
+                items.Add(new BringItem
                 {
-                    "giveQuestItem" => true,
-                    "plant" => true,  // placing quest items
-                    "giveItem" => true,
-                    _ => false
-                };
-
-                if (include)
-                {
-                    items.Add(new BringItem
-                    {
-                        Alternatives = [obj.QuestItem.Name],
-                        QuestName = taskName,
-                        Type = BringItemType.QuestItem
-                    });
-                }
+                    Alternatives = [obj.QuestItem.Name],
+                    QuestName = taskName,
+                    Type = BringItemType.QuestItem
+                });
             }
 
             // DO NOT include objective.Item (FIR items are raid objectives, not bring items)
@@ -675,8 +646,8 @@ public static class QuestPlanBuilder
             if (task.Objectives != null)
             {
                 var firstObjective = task.Objectives.FirstOrDefault(obj => obj.Maps != null && obj.Maps.Count > 0);
-                if (firstObjective != null && firstObjective.Maps != null && firstObjective.Maps.Count > 0)
-                    mapName = firstObjective.Maps[0].Name;
+                if (firstObjective != null)
+                    mapName = firstObjective.Maps![0].Name;
             }
 
             unlocked.Add(new UnlockedQuest
@@ -732,7 +703,7 @@ public static class QuestPlanBuilder
         {
             // Build findQuestItem pairing lookup
             var taskRef = taskRefById.GetValueOrDefault(taskId);
-            var allObjs = taskRef?.Objectives ?? new List<TaskElement.ObjectiveElement>();
+            var allObjs = taskRef?.Objectives ?? [];
             var findLookup = allObjs
                 .Where(o => o.Type == "findQuestItem" && o.QuestItem != null)
                 .ToDictionary(o => o.QuestItem!.Id, o => o.Id, StringComparer.Ordinal);
