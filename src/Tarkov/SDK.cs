@@ -52,7 +52,7 @@ namespace SDK
     	}		
 		public readonly partial struct TarkovApplication
 		{
-			public const uint _menuOperation = 0x130; // -.\uEA0Fget
+			public const uint _menuOperation = 0x128; // -.\uEA0Fget
 			public const uint ClientBackEnd = 0x30; // -.\uEA0F
 			public const uint HideoutControllerAccess = 0x158; // -.\uEA0Fget
 		}
@@ -83,19 +83,19 @@ namespace SDK
 
 		public readonly partial struct ClientLocalGameWorld
 		{
-			public const uint BtrController = 0x28; // BtrController (DEC 3)
-			public const uint TransitController = 0x38; // TransitController (DEC 3)
-			public const uint ExfilController = 0x58; // ExfiltrationController (DEC 3)
-			public const uint ClientShellingController = 0xA8; // ArtilleryShellingControllerClient (DEC 3)
-			public const uint LocationId = 0xD0; // String (DEC 3)
-			public const uint LootList = 0x198; // List<IKillable> (DEC 3)
-			public const uint RegisteredPlayers = 0x1B8; // List<EFT.IPlayer> (DEC 3)
-			public const uint BorderZones = 0x1F0; // BorderZone[] (DEC 3)
-			public const uint MainPlayer = 0x210; // EFT.Player (DEC 3)
-			public const uint World = 0x218; // EFT.World (DEC 3)
-			public const uint SynchronizableObjectLogicProcessor = 0x248; // SynchronizableObjectLogicProcessor (DEC 3)
-			public const uint Grenades = 0x288; // DictionaryListHydra<Int32, Throwable> (DEC 3)
-		}
+            public const uint BtrController = 0x28; // public const uint _BtrController_k__BackingField
+            public const uint TransitController = 0x38; // public const uint _TransitController_k__BackingField
+            public const uint ExfilController = 0x58; // public const uint _ExfiltrationController_k__BackingField
+            public const uint ClientShellingController = 0xA8; // public const uint _ClientShellingController_k__BackingField
+            public const uint LocationId = 0xD0; // public const uint _LocationId_k__BackingField
+            public const uint LootList = 0x198;
+            public const uint RegisteredPlayers = 0x1B8;
+            public const uint BorderZones = 0x1F0;
+            public const uint MainPlayer = 0x210;
+            public const uint World = 0x218;
+            public const uint SynchronizableObjectLogicProcessor = 0x248; // public const uint _SynchronizableObjectLogicProcessor_k__BackingField
+            public const uint Grenades = 0x288; // DictionaryListHydra<Int32, Throwable> (DEC 3)
+        }
 
 		public readonly partial struct TransitController
 		{
@@ -328,7 +328,7 @@ namespace SDK
 		public readonly partial struct Grenade
 		{
 			public const uint IsDestroyed = 0x4D; // Boolean (DEC 1)
-			public const uint WeaponSource = 0x80; // -.\uEF81 (UNKN)
+			public const uint WeaponSource = 0x98; // -.\uEF81 (UNKN)
 		}
 
 		public readonly partial struct GamePlayerOwner
@@ -352,12 +352,12 @@ namespace SDK
 			public const uint _healthController = 0x960; // IHealthController (DEC 3)
 			public const uint _inventoryController = 0x978; // PlayerInventoryController (DEC 3)
 			public const uint _handsController = 0x980; // AbstractHandsController (DEC 3)
-			public const uint InteractionRayOriginOnStartOperation = 0xA14; // UnityEngine.Vector3 (DEC 3)
-			public const uint InteractionRayDirectionOnStartOperation = 0xA00; // UnityEngine.Vector3 (DEC 3)
-			public const uint IsYourPlayer = 0xA81; // Boolean (DEC 3)
-			public const uint VoipID = 0x8f0; // Boolean (DEC 3)
-			public const uint Id = 0x8f8; 
-			public const uint GameWorld = 0x5f8; // EFT.GameWorld (DEC 3)
+			public const uint InteractionRayOriginOnStartOperation = 0xA1C; // UnityEngine.Vector3 (DEC 3)
+			public const uint InteractionRayDirectionOnStartOperation = 0xA28; // UnityEngine.Vector3 (DEC 3)
+			public const uint IsYourPlayer = 0xA89; // Boolean (DEC 3)
+			public const uint VoipID = 0x8F0; // Boolean (DEC 3)
+			public const uint Id = 0x8F8; 
+			public const uint GameWorld = 0x5F8; // EFT.GameWorld (DEC 3)
 		}
 
 		public readonly partial struct ObservedPlayerView
@@ -367,11 +367,11 @@ namespace SDK
 			public const uint VisibleToCameraType = 0x60; // ECameraType (DEC 3) - <VisibleToCameraType>k__BackingField
 			public const uint GroupID = 0x80; // String (DEC 3) - <GroupId>k__BackingField
 			public const uint Side = 0x94; // EPlayerSide (DEC 3) - <Side>k__BackingField
-			public const uint IsAI = 0xa0; // Boolean (DEC 3) - <IsAI>k__BackingField
-			public const uint NickName = 0xb8; // String (DEC 3) - <NickName>k__BackingField
-			public const uint AccountId = 0xc0; // String (DEC 3) - <AccountId>k__BackingField
-			public const uint PlayerBody = 0xd8; // PlayerBody (DEC 3) - <PlayerBody>k__BackingField
-			public const uint Id = 0x7c; 
+			public const uint IsAI = 0xA0; // Boolean (DEC 3) - <IsAI>k__BackingField
+			public const uint NickName = 0xB8; // String (DEC 3) - <NickName>k__BackingField
+			public const uint AccountId = 0xC0; // String (DEC 3) - <AccountId>k__BackingField
+			public const uint PlayerBody = 0xD8; // PlayerBody (DEC 3) - <PlayerBody>k__BackingField
+			public const uint Id = 0x7C; 
 			public const uint VoipId = 0xB0; 
 		}
 
@@ -438,7 +438,7 @@ namespace SDK
         {
             public const uint ShotNeedsFovAdjustments = 0x433;
             public const uint Breath = 0x38;
-            public const uint PositionZeroSum = 0x31c;
+            public const uint PositionZeroSum = 0x31C;
             public const uint Shootingg = 0x58;
             public const uint _aimingSpeed = 0x164;
             public const uint _isAiming = 0x145;
@@ -665,20 +665,20 @@ namespace SDK
         public readonly partial struct MovementContext
         {
             public const uint Player = 0x48; // EFT.Player
-            public const uint _rotation = 0xc8; // UnityEngine.Vector2
+            public const uint _rotation = 0xC8; // UnityEngine.Vector2
             public const uint PlantState = 0x78; // EFT.BaseMovementState <PlantState> PlantState
             public const uint CurrentState = 0x1F0; // EFT.BaseMovementState <CurrentState>k__BackingField
             public const uint _states = 0x480; // System.Collections.Generic.Dictionary<Byte, BaseMovementState> <_states> _states
-            public const uint _movementStates = 0x4b0; // -.IPlayerStateContainerBehaviour[] <_movementStates> _movementStates
-            public const uint _tilt = 0xb0; // Single <_tilt> _tilt
+            public const uint _movementStates = 0x4B0; // -.IPlayerStateContainerBehaviour[] <_movementStates> _movementStates
+            public const uint _tilt = 0xB4; // Single <_tilt> _tilt
             public const uint _physicalCondition = 0x198; // System.Int32 <_physicalCondition> _physicalCondition
-            public const uint _speedLimitIsDirty = 0x1b9; // Boolean <_speedLimitIsDirty> _speedLimitIsDirty
-            public const uint StateSpeedLimit = 0x1bc; // Single <<StateSpeedLimit>k__BackingField> <StateSpeedLimit>k__BackingField
-            public const uint StateSprintSpeedLimit = 0x1c0; // Single <<StateSprintSpeedLimit>k__BackingField> <StateSprintSpeedLimit>k__BackingField
-            public const uint _lookDirection = 0x3b8; // UnityEngine.Vector3  <_lookDirection> _lookDirection
-            public const uint WalkInertia = 0x4bc;
-            public const uint SprintBrakeInertia = 0x4c0;
-			public const uint _poseInertia = 0x4C4;
+            public const uint _speedLimitIsDirty = 0x1B9;
+            public const uint StateSpeedLimit = 0x1BC;
+            public const uint StateSprintSpeedLimit = 0x1C0;
+            public const uint _lookDirection = 0x3B8;
+            public const uint WalkInertia = 0x4bC;
+            public const uint SprintBrakeInertia = 0x4C0;
+            public const uint _poseInertia = 0x4C4;
 			public const uint _currentPoseInertia = 0x4C8;
 			public const uint _inertiaAppliedTime = 0x26C;			
         }
@@ -1070,7 +1070,7 @@ namespace SDK
 		{
 			public const uint OpticCameraManager = 0x10; // UNCHANGED DEC 2025
 			public const uint Camera = 0x60; // UnityEngine.Camera - FPS Camera (UNCHANGED DEC 2025)
-            public const uint GetInstance_RVA = 0x3921890; // DEC 2025 - from Camera-PWA
+            public const uint GetInstance_RVA = 0x3CB1050; // DEC 2025 - from Camera-PWA
             public const uint CameraDerefOffset = 0x10; // UNCHANGED DEC 2025 - dereference offset for Camera objects
 		}
 
@@ -1103,25 +1103,15 @@ namespace SDK
             public const uint Rain = 0x2c;
             public const uint WindMagnitude = 0x14;
             public const uint isEnabled = 0x10;
-        }		
+        }
         public static class Special
         {
-            public const ulong TypeInfoTableRva = 0x5AA9158; // TYPE_INFO_TABLE //updated feb11
-
-            public const uint FirearmController_WeaponDirectionGetterRva = 0x1386390; // FirearmController.get_WeaponDirection_RVA 
+            public const ulong TypeInfoTableRva = 0x5AA90C8;
             public const uint EFTHardSettings_TypeIndex = 225;
-            public const uint EftScreenManager_TypeIndex = 15154;
             public const uint GPUInstancerManager_TypeIndex = 4917;
             public const uint WeatherController_TypeIndex = 10104;
-            public const uint FirearmController_TypeIndex = 6939;
-            public const uint LevelSettings_TypeIndex = 2053;
-            public const uint GamePlayerOwner_TypeIndex = 8568;
-            public const uint CameraManager_TypeIndex = 13167;
-            public const uint ClientBackendSession_TypeIndex = 8201;
-            public const uint EftClientBackendSession_TypeIndex = 8275;
             public const uint GlobalConfiguration_TypeIndex = 6406;
-
-        }        
+        }
         public readonly partial struct Il2CppClass
         {
             // Existing:
