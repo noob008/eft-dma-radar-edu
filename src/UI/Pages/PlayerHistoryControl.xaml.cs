@@ -24,6 +24,8 @@ using MouseEventArgs = System.Windows.Input.MouseEventArgs;
 using Point = System.Windows.Point;
 using MessageBox = eft_dma_radar.UI.Controls.MessageBox;
 using eft_dma_radar.Tarkov.EFTPlayer.SpecialCollections;
+using DataGridCell = System.Windows.Controls.DataGridCell;
+using DataGrid = System.Windows.Controls.DataGrid;
 
 namespace eft_dma_radar.UI.Pages
 {

@@ -39,6 +39,7 @@ using Orientation = System.Windows.Controls.Orientation;
 using Point = System.Windows.Point;
 using UserControl = System.Windows.Controls.UserControl;
 using Window = HandyControl.Controls.Window;
+using MenuItem = System.Windows.Controls.MenuItem;
 
 namespace eft_dma_radar.UI.Pages
 {
