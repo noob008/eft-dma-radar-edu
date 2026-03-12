@@ -1967,8 +1967,6 @@ function drawAimview(players){
 
   const W = aimviewCanvas.width;
   const H = aimviewCanvas.height;
-  const halfW = W / 2;
-  const halfH = H / 2;
 
   aimviewCtx.clearRect(0, 0, W, H);
   aimviewCtx.fillStyle = "rgba(0,0,0,0.88)";
@@ -1976,14 +1974,9 @@ function drawAimview(players){
 
   const centered = lastCenteredPlayer;
   if(centered){
-    const cx  = Number(centered.worldX ?? centered.WorldX ?? 0);
-    const cy  = Number(centered.worldY ?? centered.WorldY ?? 0);
-    const cz  = Number(centered.worldZ ?? centered.WorldZ ?? 0);
-    const yaw = toRadMaybe(centered.yaw ?? centered.Yaw ?? 0);
-
-    const hFov = (Number(state.aimviewFov) || 90) * Math.PI / 180;
-    const vFov = hFov * (H / W);
-    const dotR = 4;
+    const cx = Number(centered.worldX ?? centered.WorldX ?? 0);
+    const cy = Number(centered.worldY ?? centered.WorldY ?? 0);
+    const cz = Number(centered.worldZ ?? centered.WorldZ ?? 0);
 
     for(const p of players){
       if(!p || p === centered) continue;
@@ -1995,31 +1988,25 @@ function drawAimview(players){
       const tz = Number(p.worldZ ?? p.WorldZ ?? NaN);
       if(!Number.isFinite(tx) || !Number.isFinite(ty) || !Number.isFinite(tz)) continue;
 
-      const dx = tx - cx;
-      const dz = tz - cz;
-      const dy = ty - cy;
-      const hdist = Math.sqrt(dx*dx + dz*dz);
-      const fullDist = Math.sqrt(dx*dx + dy*dy + dz*dz);
-
-      // Horizontal angle: atan2(-dz, dx) gives the same convention as player yaw (0 = East, CCW positive)
-      let relH = Math.atan2(-dz, dx) - yaw;
-      while(relH >  Math.PI) relH -= 2 * Math.PI;
-      while(relH < -Math.PI) relH += 2 * Math.PI;
-
-      const relV = Math.atan2(dy, Math.max(0.01, hdist));
-
-      if(Math.abs(relH) > hFov / 2 || Math.abs(relV) > vFov / 2) continue;
-
-      const px = halfW + (relH / (hFov / 2)) * halfW;
-      const py = halfH - (relV / (vFov / 2)) * halfH;
-
+      const fullDist = Math.sqrt((tx-cx)**2 + (ty-cy)**2 + (tz-cz)**2);
       const col = playerColor(p);
 
-      aimviewCtx.beginPath();
-      aimviewCtx.arc(px, py, dotR, 0, Math.PI * 2);
-      aimviewCtx.fillStyle = col;
-      aimviewCtx.fill();
+      // SkeletonScreen: 13 segments × 4 floats = [x1,y1,x2,y2,...] normalised [0..1].
+      // null = anchor bone behind camera → player not in view, skip entirely.
+      const skel = p?.skeletonScreen ?? p?.SkeletonScreen;
+      if(!Array.isArray(skel) || skel.length !== 52) continue;
 
+      // Map normalised viewport coords → canvas pixels
+      aimviewCtx.strokeStyle = col;
+      aimviewCtx.lineWidth = 1.5;
+      aimviewCtx.beginPath();
+      for(let i = 0; i < 52; i += 4){
+        aimviewCtx.moveTo(skel[i]   * W, skel[i+1] * H);
+        aimviewCtx.lineTo(skel[i+2] * W, skel[i+3] * H);
+      }
+      aimviewCtx.stroke();
+
+      // Name above head (first segment start = head)
       if(state.showNames){
         const nm = String(p?.name ?? p?.Name ?? "");
         if(nm){
@@ -2027,19 +2014,23 @@ function drawAimview(players){
           aimviewCtx.font = "10px monospace";
           aimviewCtx.textAlign = "center";
           aimviewCtx.textBaseline = "bottom";
-          aimviewCtx.fillText(nm, px, py - dotR - 1);
+          aimviewCtx.fillText(nm, skel[0] * W, skel[1] * H - 3);
         }
       }
 
+      // Distance below feet (segments 6+8 end points = lFoot/rFoot)
+      const fx = (skel[26] + skel[30]) / 2 * W;
+      const fy = Math.max(skel[27], skel[31]) * H;
       aimviewCtx.fillStyle = "rgba(229,231,235,0.85)";
       aimviewCtx.font = "10px monospace";
       aimviewCtx.textAlign = "center";
       aimviewCtx.textBaseline = "top";
-      aimviewCtx.fillText(fullDist.toFixed(0) + "m", px, py + dotR + 2);
+      aimviewCtx.fillText(fullDist.toFixed(0) + "m", fx, fy + 2);
     }
   }
 
   // Crosshair
+  const halfW = W / 2, halfH = H / 2;
   const ch = 14, gap = 4;
   aimviewCtx.strokeStyle = "rgba(255,255,255,0.55)";
   aimviewCtx.lineWidth = 1;

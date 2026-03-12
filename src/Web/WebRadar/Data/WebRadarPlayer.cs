@@ -1,4 +1,4 @@
-﻿﻿using eft_dma_radar.Common.Maps;
+﻿using eft_dma_radar.Common.Maps;
 using eft_dma_radar.Tarkov.EFTPlayer;
 using eft_dma_radar.Tarkov.EFTPlayer.Plugins;
 using eft_dma_radar.Tarkov.Loot;
@@ -57,6 +57,7 @@ namespace eft_dma_radar.Tarkov.WebRadar.Data
         [Key(25)] public float WorldX { get; init; }
         [Key(26)] public float WorldY { get; init; }
         [Key(27)] public float WorldZ { get; init; }
+        [Key(28)] public float[]? SkeletonScreen { get; init; }
 
         // ============================================================
         // FACTORY
@@ -125,6 +126,7 @@ namespace eft_dma_radar.Tarkov.WebRadar.Data
                 WorldX = pos.X,
                 WorldY = pos.Y,
                 WorldZ = pos.Z,
+                SkeletonScreen = player.Skeleton?.GetWebRadarScreenBuffer(),
 
                 Value = player.Gear?.Value ?? 0,
                 KD = kd,
