@@ -170,6 +170,52 @@ namespace eft_dma_radar.Common.Unity
         {
             return Vector2.Distance(ViewportCenter.AsVector2(), point.AsVector2());
         }
+
+        /// <summary>
+        /// Builds a synthetic <see cref="ViewMatrix"/> from a world-space position and EFT rotation angles,
+        /// using the same transposed convention as the live game view matrix read from memory.
+        /// Suitable for projecting bones seen from a player other than local.
+        /// </summary>
+        /// <param name="position">World-space camera origin (player eye position).</param>
+        /// <param name="yawDeg">Horizontal rotation in degrees (EFT Rotation.X).</param>
+        /// <param name="pitchDeg">Vertical rotation in degrees (EFT Rotation.Y, positive = down).</param>
+        public static ViewMatrix BuildViewMatrix(Vector3 position, float yawDeg, float pitchDeg)
+        {
+            // EFT angles: yaw rotates around Y axis, pitch rotates around X axis.
+            // Positive pitch = looking down in EFT convention.
+            float yaw   =  yawDeg   * (MathF.PI / 180f);
+            float pitch = -pitchDeg * (MathF.PI / 180f); // negate: EFT positive = down, we want positive = up
+
+            float cy = MathF.Cos(yaw),   sy = MathF.Sin(yaw);
+            float cp = MathF.Cos(pitch), sp = MathF.Sin(pitch);
+
+            // Camera basis in world space:
+            //   forward = (sin(yaw)*cos(pitch),  sin(pitch), cos(yaw)*cos(pitch))
+            //   right   = (cos(yaw),             0,          -sin(yaw))
+            //   up      = (-sin(yaw)*sin(pitch), cos(pitch), -cos(yaw)*sin(pitch))
+            var forward = new Vector3( sy * cp,  sp, cy * cp);
+            var right   = new Vector3( cy,       0f, -sy);
+            var up      = new Vector3(-sy * sp,  cp, -cy * sp);
+
+            // View matrix rows (transposed VP) — matching WorldToScreen convention:
+            //   Translation row  = forward  (used for w depth)
+            //   Right row        = right    (used for x)
+            //   Up row           = up       (used for y)
+            //   M44 = -(forward · position)
+            //   M14 = -(right   · position)
+            //   M24 = -(up      · position)
+            var vm = new ViewMatrix
+            {
+                Translation = forward,
+                Right        = right,
+                Up           = up,
+                M44          = -Vector3.Dot(forward, position),
+                M14          = -Vector3.Dot(right,   position),
+                M24          = -Vector3.Dot(up,      position),
+            };
+
+            return vm;
+        }
         #endregion
     }
 }

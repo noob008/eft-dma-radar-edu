@@ -1,4 +1,5 @@
 ﻿using eft_dma_radar.Common.Maps;
+using eft_dma_radar.Common.Unity;
 using eft_dma_radar.Tarkov.EFTPlayer;
 using eft_dma_radar.Tarkov.EFTPlayer.Plugins;
 using eft_dma_radar.Tarkov.Loot;
@@ -44,7 +45,8 @@ namespace eft_dma_radar.Tarkov.WebRadar.Data
         [Key(17)] public bool IsLocal { get; init; }
         [Key(18)] public bool IsFriendly { get; init; }
         [Key(19)] public bool IsHuman { get; init; }
-        [Key(20)] public string TypeName { get; init; }
+        [Key(20)] public string TypeName  { get; init; }
+        [Key(31)] public string PlayerKey  { get; init; }
 
         // ============================================================
         // FLATTENED TRANSFORM (JS SAFE)
@@ -58,6 +60,8 @@ namespace eft_dma_radar.Tarkov.WebRadar.Data
         [Key(26)] public float WorldY { get; init; }
         [Key(27)] public float WorldZ { get; init; }
         [Key(28)] public float[]? SkeletonScreen { get; init; }
+        [Key(29)] public float[]? SkeletonWorld  { get; init; }
+        [Key(30)] public float    Pitch          { get; init; }
 
         // ============================================================
         // FACTORY
@@ -118,6 +122,7 @@ namespace eft_dma_radar.Tarkov.WebRadar.Data
                 IsLocal = isLocal,
                 IsFriendly = isFriendly,
                 IsHuman = isHuman,
+                PlayerKey = $"{player.Name ?? "Unknown"}|{player.PlayerSide}",
 
                 X = mappos.X,
                 Y = mappos.Y,
@@ -127,6 +132,8 @@ namespace eft_dma_radar.Tarkov.WebRadar.Data
                 WorldY = pos.Y,
                 WorldZ = pos.Z,
                 SkeletonScreen = player.Skeleton?.GetWebRadarScreenBuffer(),
+                SkeletonWorld  = BuildSkeletonWorld(player.Skeleton),
+                Pitch          = player.Rotation.Y,
 
                 Value = player.Gear?.Value ?? 0,
                 KD = kd,
@@ -144,5 +151,33 @@ namespace eft_dma_radar.Tarkov.WebRadar.Data
                 Rig = player.Gear?.Equipment?.TryGetValue("TacticalVest", out var r) == true ? r.Long : "None"
             };
         }
+            // Bone order matches GetWebRadarScreenBuffer segment layout:
+            // 0=Head 1=Neck 2=UpperTorso 3=MidTorso 4=LowerTorso 5=Pelvis
+            // 6=LCollar 7=RCollar 8=LElbow 9=RElbow 10=LHand 11=RHand
+            // 12=LKnee 13=RKnee 14=LFoot 15=RFoot
+            private static readonly Bones[] _boneOrder = [
+                Bones.HumanHead, Bones.HumanNeck, Bones.HumanSpine3, Bones.HumanSpine2,
+                Bones.HumanSpine1, Bones.HumanPelvis,
+                Bones.HumanLCollarbone, Bones.HumanRCollarbone,
+                Bones.HumanLForearm2, Bones.HumanRForearm2,
+                Bones.HumanLPalm, Bones.HumanRPalm,
+                Bones.HumanLThigh2, Bones.HumanRThigh2,
+                Bones.HumanLFoot, Bones.HumanRFoot,
+            ];
+
+            private static float[]? BuildSkeletonWorld(Skeleton? skeleton)
+            {
+                if (skeleton?.HasValidPosition != true) return null;
+                var bones = skeleton.Bones;
+                var mid = bones[Bones.HumanSpine2].Position;
+                var buf = new float[48]; // 16 bones × 3 floats
+                int i = 0;
+                foreach (var b in _boneOrder)
+                {
+                    var pos = (bones.TryGetValue(b, out var t) && t.HasValidPosition) ? t.Position : mid;
+                    buf[i++] = pos.X; buf[i++] = pos.Y; buf[i++] = pos.Z;
+                }
+                return buf;
+            }
+        }
     }
-}

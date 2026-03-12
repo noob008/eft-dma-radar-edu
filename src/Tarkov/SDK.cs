@@ -1070,7 +1070,7 @@ namespace SDK
 		{
 			public const uint OpticCameraManager = 0x10; // UNCHANGED DEC 2025
 			public const uint Camera = 0x60; // UnityEngine.Camera - FPS Camera (UNCHANGED DEC 2025)
-            public const uint GetInstance_RVA = 0x3CB1050; // DEC 2025 - from Camera-PWA
+            public const uint GetInstance_RVA = 0x2CF8AB0; // DEC 2025 - from Camera-PWA
             public const uint CameraDerefOffset = 0x10; // UNCHANGED DEC 2025 - dereference offset for Camera objects
 		}
 
@@ -1106,7 +1106,7 @@ namespace SDK
         }
         public static class Special
         {
-            public const ulong TypeInfoTableRva = 0x5AA90C8;
+            public const ulong TypeInfoTableRva = 0x5AA9118;
             public const uint EFTHardSettings_TypeIndex = 225;
             public const uint GPUInstancerManager_TypeIndex = 4917;
             public const uint WeatherController_TypeIndex = 10104;
