@@ -26,7 +26,7 @@ namespace eft_dma_radar.Tarkov.Unity.IL2CPP
                 if (!typeInfoTable.IsValidVirtualAddress())
                     return 0;
 
-                // 2. TypeIndex ¡ú klass*
+                // 2. TypeIndex ï¿½ï¿½ klass*
                 ulong slot = typeInfoTable + 
                     (ulong)Offsets.Special.GlobalConfiguration_TypeIndex * (ulong)IntPtr.Size;
 
@@ -41,10 +41,10 @@ namespace eft_dma_radar.Tarkov.Unity.IL2CPP
                 if (!staticFields.IsValidVirtualAddress())
                     return 0;
 
-                // 4. Read list pointer ¡ª THIS is the important part
-                //    InstanceOffset == 0x0 ¡ú static field #0
+                // 4. Read list pointer ï¿½ï¿½ THIS is the important part
+                //    InstanceOffset == 0x0 ï¿½ï¿½ static field #0
                 var listPtr = Memory.ReadPtr(
-                    staticFields + Offsets.EFT.GPUInstancerManager.Instance, false);
+                    staticFields + Offsets.GPUInstancerManager.Instance, false);
 
                 if (!listPtr.IsValidVirtualAddress())
                     return 0;

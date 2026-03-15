@@ -75,6 +75,15 @@
       <span id="deadMinValueText" class="mono">0</span>
 
       <label>Players Widget <input type="checkbox" id="showPlayersWidget"></label>
+      <label>Aimview <input type="checkbox" id="showAimview"></label>
+      <label>
+        Aimview FOV <span class="mono" id="aimviewFovText">90Â°</span>
+        <input type="range" id="aimviewFov" min="20" max="160" step="5">
+      </label>
+      <label>
+        Aimview Size
+        <input type="range" id="aimviewSize" min="160" max="480" step="20">
+      </label>
     </div>
 
     <div class="section">
@@ -203,7 +212,7 @@
   </div>
   <div class="w-body">
     <div class="w-toprow">
-      <input type="text" id="lootWidgetSearch" placeholder="Search loot (filters the list)¡­">
+      <input type="text" id="lootWidgetSearch" placeholder="Search loot (filters the list)ï¿½ï¿½">
       <span class="w-chip mono" id="lootWidgetCount">0</span>
     </div>
     <div class="w-list" id="lootWidgetList"></div>
@@ -234,6 +243,20 @@
     </div>
 
     <div class="w-list" id="playersWidgetList"></div>
+  </div>
+</div>
+
+<div id="aimviewWidget" class="widget hidden" role="dialog" aria-label="Aimview Widget">
+  <div class="w-header">
+    <div class="w-title">
+      <strong>Aimview</strong>
+    </div>
+    <div class="w-actions">
+      <button class="w-btn" id="aimviewWidgetMinBtn" title="Minimize">-</button>
+    </div>
+  </div>
+  <div class="w-body w-aimview-body">
+    <canvas id="aimviewCanvas" style="display:block;"></canvas>
   </div>
 </div>
 

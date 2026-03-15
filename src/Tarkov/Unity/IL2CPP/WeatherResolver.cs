@@ -40,7 +40,7 @@ namespace eft_dma_radar.Tarkov.Unity.IL2CPP
                 if (!Utils.IsValidVirtualAddress(typeInfoTablePtr))
                     return 0;
 
-                // 2) TypeIndex ¡ú klass*
+                // 2) TypeIndex ï¿½ï¿½ klass*
                 var index = (ulong)Offsets.Special.WeatherController_TypeIndex;
                 var slot  = typeInfoTablePtr + index * (ulong)IntPtr.Size;
 
@@ -58,7 +58,7 @@ namespace eft_dma_radar.Tarkov.Unity.IL2CPP
 
                 // 4) WeatherController singleton instance
                 var controllerInstance = SafeReadPtr(
-                    staticFieldsBase + Offsets.EFT.WeatherController.Instance,
+                    staticFieldsBase + Offsets.WeatherController.Instance,
                     useCache: false);
 
                 if (!Utils.IsValidVirtualAddress(controllerInstance))

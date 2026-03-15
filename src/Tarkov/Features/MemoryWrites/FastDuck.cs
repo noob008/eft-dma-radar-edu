@@ -32,7 +32,7 @@ namespace eft_dma_radar.Tarkov.Features.MemoryWrites
                 if (Enabled != _lastEnabledState)
                 {
                     var targetSpeed = Enabled ? FAST_SPEED : ORIGINAL_SPEED;
-                    writes.AddValueEntry(hardSettingsInstance + Offsets.EFT.EFTHardSettings.POSE_CHANGING_SPEED, targetSpeed);
+                    writes.AddValueEntry(hardSettingsInstance + Offsets.EFTHardSettings.POSE_CHANGING_SPEED, targetSpeed);
 
                     writes.Callbacks += () =>
                     {

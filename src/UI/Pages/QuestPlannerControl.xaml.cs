@@ -7,6 +7,7 @@ using eft_dma_radar.UI.Misc;
 using UserControl = System.Windows.Controls.UserControl;
 using Point = System.Windows.Point;
 using MouseEventArgs = System.Windows.Input.MouseEventArgs;
+using MenuItem = System.Windows.Controls.MenuItem;
 
 namespace eft_dma_radar.UI.Pages;
 

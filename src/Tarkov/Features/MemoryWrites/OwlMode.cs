@@ -36,8 +36,8 @@ namespace eft_dma_radar.Tarkov.Features.MemoryWrites
                         ? (NEW_MOUSE_LOOK_HORIZONTAL_LIMIT, NEW_MOUSE_LOOK_VERTICAL_LIMIT)
                         : (ORIGINAL_MOUSE_LOOK_HORIZONTAL_LIMIT, ORIGINAL_MOUSE_LOOK_VERTICAL_LIMIT);
 
-                    writes.AddValueEntry(hardSettingsInstance + Offsets.EFT.EFTHardSettings.MOUSE_LOOK_HORIZONTAL_LIMIT, horizontalLimit);
-                    writes.AddValueEntry(hardSettingsInstance + Offsets.EFT.EFTHardSettings.MOUSE_LOOK_VERTICAL_LIMIT, verticalLimit);
+                    writes.AddValueEntry(hardSettingsInstance + Offsets.EFTHardSettings.MOUSE_LOOK_HORIZONTAL_LIMIT, horizontalLimit);
+                    writes.AddValueEntry(hardSettingsInstance + Offsets.EFTHardSettings.MOUSE_LOOK_VERTICAL_LIMIT, verticalLimit);
 
                     writes.Callbacks += () =>
                     {

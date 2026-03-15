@@ -30,7 +30,7 @@ namespace eft_dma_radar.Tarkov.Features.MemoryWrites
                 if (Enabled != _lastEnabledState)
                 {
                     var targetLayers = Enabled ? DISABLED_WEAPON_OCCLUSION_LAYERS : ORIGINAL_WEAPON_OCCLUSION_LAYERS;
-                    writes.AddValueEntry(hardSettingsInstance + Offsets.EFT.EFTHardSettings.WEAPON_OCCLUSION_LAYERS, targetLayers);
+                    writes.AddValueEntry(hardSettingsInstance + Offsets.EFTHardSettings.WEAPON_OCCLUSION_LAYERS, targetLayers);
 
                     writes.Callbacks += () =>
                     {

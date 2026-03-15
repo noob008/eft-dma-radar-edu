@@ -43,7 +43,7 @@ namespace eft_dma_radar.Tarkov.Unity.IL2CPP
                     return 0;
 
                 var instance = Memory.ReadPtr(
-                    staticFieldsBase + Offsets.EFT.EFTHardSettings._instance,
+                    staticFieldsBase + Offsets.EFTHardSettings._instance,
                     useCache: false);
 
                 if (!Utils.IsValidVirtualAddress(instance))

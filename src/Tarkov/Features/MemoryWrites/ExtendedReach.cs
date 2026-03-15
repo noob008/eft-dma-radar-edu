@@ -99,8 +99,8 @@ namespace eft_dma_radar.Tarkov.Features.MemoryWrites
                 ? (distance, distance)
                 : (ORIGINAL_LOOT_RAYCAST_DISTANCE, ORIGINAL_DOOR_RAYCAST_DISTANCE);
 
-            writes.AddValueEntry(hardSettingsInstance + Offsets.EFT.EFTHardSettings.LOOT_RAYCAST_DISTANCE, lootDistance);
-            writes.AddValueEntry(hardSettingsInstance + Offsets.EFT.EFTHardSettings.DOOR_RAYCAST_DISTANCE, doorDistance);
+            writes.AddValueEntry(hardSettingsInstance + Offsets.EFTHardSettings.LOOT_RAYCAST_DISTANCE, lootDistance);
+            writes.AddValueEntry(hardSettingsInstance + Offsets.EFTHardSettings.DOOR_RAYCAST_DISTANCE, doorDistance);
         }
 
         public override void OnRaidStart()

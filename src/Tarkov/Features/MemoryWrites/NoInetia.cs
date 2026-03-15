@@ -104,7 +104,7 @@ namespace eft_dma_radar.Tarkov.Features.MemoryWrites
             writes.AddValueEntry(movementContext + Offsets.MovementContext._poseInertia, enabled ? 0f : 1f);
             writes.AddValueEntry(movementContext + Offsets.MovementContext._currentPoseInertia, enabled ? 0f : 1f);
             writes.AddValueEntry(movementContext + Offsets.MovementContext._inertiaAppliedTime, enabled ? 0f : 1f);
-            writes.AddValueEntry(hardSettings + Offsets.EFT.EFTHardSettings.DecelerationSpeed, enabled ? 100f : 1f);
+            writes.AddValueEntry(hardSettings + Offsets.EFTHardSettings.DecelerationSpeed, enabled ? 100f : 1f);
         }
         private ulong GetHardSettings()
         {

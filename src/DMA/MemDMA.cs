@@ -199,6 +199,7 @@ namespace eft_dma_radar.Tarkov
 
                     _starting = true;
 
+                    IL2CPP.Il2CppDumper.Dump();
                     InputManager.Initialize();
                     CameraManager.Initialize(); // IL2CPP ported - signature scan
                     _ready = true;

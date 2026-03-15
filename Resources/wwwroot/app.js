@@ -26,6 +26,11 @@ const playersWidgetList = document.getElementById("playersWidgetList");
 const playersWidgetCount = document.getElementById("playersWidgetCount");
 const playersWidgetSub = document.getElementById("playersWidgetSub");
 
+const aimviewWidget    = document.getElementById("aimviewWidget");
+const aimviewWidgetMinBtn = document.getElementById("aimviewWidgetMinBtn");
+const aimviewCanvas    = document.getElementById("aimviewCanvas");
+const aimviewCtx       = aimviewCanvas ? aimviewCanvas.getContext("2d") : null;
+
 const lootFilterModal = document.getElementById("lootFilterModal");
 const lootFilterCard  = lootFilterModal.querySelector(".card");
 const lootFilterHeader= lootFilterModal.querySelector(".header");
@@ -223,9 +228,14 @@ const defaults = {
 
   showLootWidget: false,
   showPlayersWidget: false,
+  showAimview: false,
 
   lootWidget: { x: 14, y: 64, minimized: false },
   playersWidget: { x: 14, y: 420, minimized: false },
+  aimviewWidget: { x: 300, y: 14, minimized: false },
+
+  aimviewFov: 90,
+  aimviewSize: 260,
 
   lootWidgetSearch: "",
   playersWidgetOnlyPMCs: false,
@@ -262,6 +272,7 @@ function mergeState(parsed){
     lootFilterWindow: { ...deepClone(defaults.lootFilterWindow), ...(parsed.lootFilterWindow || {}) },
     lootWidget: { ...deepClone(defaults.lootWidget), ...(parsed.lootWidget || {}) },
     playersWidget: { ...deepClone(defaults.playersWidget), ...(parsed.playersWidget || {}) },
+    aimviewWidget: { ...deepClone(defaults.aimviewWidget), ...(parsed.aimviewWidget || {}) },
   };
 
   if(out.lootFilterWindow){
@@ -284,6 +295,10 @@ function mergeState(parsed){
   };
   out.lootWidget = normWidget(out.lootWidget);
   out.playersWidget = normWidget(out.playersWidget);
+  out.aimviewWidget = normWidget(out.aimviewWidget);
+
+  out.aimviewFov  = Math.max(20, Math.min(160, Number(out.aimviewFov)  || 90));
+  out.aimviewSize = Math.max(160, Math.min(480, Number(out.aimviewSize) || 260));
 
   if(!Array.isArray(out.lootGroups)) out.lootGroups = [];
   for(const g of out.lootGroups){
@@ -399,6 +414,10 @@ const inputs = {
   showHeight: $("showHeight"),
   playerSize: $("playerSize"),
   showPlayersWidget: $("showPlayersWidget"),
+  showAimview:       $("showAimview"),
+  aimviewFov:        $("aimviewFov"),
+  aimviewFovText:    $("aimviewFovText"),
+  aimviewSize:       $("aimviewSize"),
 
   showGroups: $("showGroups"),
   groupAlpha: $("groupAlpha"),
@@ -473,6 +492,12 @@ function bindAllInputs(){
   inputs.showHeight.checked = !!state.showHeight;
   inputs.playerSize.value = String(state.playerSize);
   inputs.showPlayersWidget.checked = !!state.showPlayersWidget;
+  if(inputs.showAimview) inputs.showAimview.checked = !!state.showAimview;
+  if(inputs.aimviewFov){
+    inputs.aimviewFov.value = String(state.aimviewFov);
+    if(inputs.aimviewFovText) inputs.aimviewFovText.textContent = state.aimviewFov + "\u00b0";
+  }
+  if(inputs.aimviewSize) inputs.aimviewSize.value = String(state.aimviewSize);
 
   inputs.showGroups.checked = !!state.showGroups;
   inputs.groupAlpha.value = String(state.groupAlpha);
@@ -528,6 +553,17 @@ function bindAllInputs(){
   onBool("showHeight", inputs.showHeight);
   onNum("playerSize", inputs.playerSize, (v)=>Math.max(1, Number(v)));
   onBool("showPlayersWidget", inputs.showPlayersWidget, applyWidgetsFromState);
+  if(inputs.showAimview) onBool("showAimview", inputs.showAimview, applyWidgetsFromState);
+  if(inputs.aimviewFov) inputs.aimviewFov.oninput = () => {
+    state.aimviewFov = Math.max(20, Math.min(160, Number(inputs.aimviewFov.value) || 90));
+    if(inputs.aimviewFovText) inputs.aimviewFovText.textContent = state.aimviewFov + "\u00b0";
+    saveSettings();
+  };
+  if(inputs.aimviewSize) inputs.aimviewSize.oninput = () => {
+    state.aimviewSize = Math.max(160, Math.min(480, Number(inputs.aimviewSize.value) || 260));
+    updateAimviewCanvasSize();
+    saveSettings();
+  };
 
   onBool("showGroups", inputs.showGroups);
   onNum("groupAlpha", inputs.groupAlpha, (v)=>Math.min(1, Math.max(0, Number(v))));
@@ -623,12 +659,15 @@ function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
 function applyWidgetsFromState(){
   lootWidget.classList.toggle("hidden", !state.showLootWidget);
   playersWidget.classList.toggle("hidden", !state.showPlayersWidget);
+  if(aimviewWidget) aimviewWidget.classList.toggle("hidden", !state.showAimview);
 
   lootWidget.classList.toggle("minimized", !!state.lootWidget?.minimized);
   playersWidget.classList.toggle("minimized", !!state.playersWidget?.minimized);
+  if(aimviewWidget) aimviewWidget.classList.toggle("minimized", !!state.aimviewWidget?.minimized);
 
   const lw = state.lootWidget || defaults.lootWidget;
   const pw = state.playersWidget || defaults.playersWidget;
+  const aw = state.aimviewWidget || defaults.aimviewWidget;
 
   const place = (el, w) => {
     const rect = el.getBoundingClientRect();
@@ -642,6 +681,9 @@ function applyWidgetsFromState(){
 
   place(lootWidget, lw);
   place(playersWidget, pw);
+  if(aimviewWidget) place(aimviewWidget, aw);
+
+  updateAimviewCanvasSize();
 
   if(lootWidgetSearch) lootWidgetSearch.value = String(state.lootWidgetSearch || "");
   if(playersWidgetOnlyPMCs) playersWidgetOnlyPMCs.checked = !!state.playersWidgetOnlyPMCs;
@@ -659,6 +701,11 @@ function syncMinButtons(){
     const min = !!state.playersWidget?.minimized;
     playersWidgetMinBtn.textContent = min ? "+" : "-";
     playersWidgetMinBtn.title = min ? "Restore" : "Minimize";
+  }
+  if(aimviewWidgetMinBtn){
+    const min = !!state.aimviewWidget?.minimized;
+    aimviewWidgetMinBtn.textContent = min ? "+" : "-";
+    aimviewWidgetMinBtn.title = min ? "Restore" : "Minimize";
   }
 }
 
@@ -709,6 +756,7 @@ function initWidgetDrag(widgetEl, headerEl, stateKey){
 
 initWidgetDrag(lootWidget, lootWidget.querySelector(".w-header"), "lootWidget");
 initWidgetDrag(playersWidget, playersWidget.querySelector(".w-header"), "playersWidget");
+if(aimviewWidget) initWidgetDrag(aimviewWidget, aimviewWidget.querySelector(".w-header"), "aimviewWidget");
 
 lootWidgetMinBtn.onclick = () => {
   state.lootWidget = state.lootWidget || deepClone(defaults.lootWidget);
@@ -719,6 +767,13 @@ lootWidgetMinBtn.onclick = () => {
 playersWidgetMinBtn.onclick = () => {
   state.playersWidget = state.playersWidget || deepClone(defaults.playersWidget);
   state.playersWidget.minimized = !state.playersWidget.minimized;
+  applyWidgetsFromState();
+  saveSettings();
+};
+
+if(aimviewWidgetMinBtn) aimviewWidgetMinBtn.onclick = () => {
+  state.aimviewWidget = state.aimviewWidget || deepClone(defaults.aimviewWidget);
+  state.aimviewWidget.minimized = !state.aimviewWidget.minimized;
   applyWidgetsFromState();
   saveSettings();
 };
@@ -1168,14 +1223,13 @@ if(pasteLootGroupsBtn) pasteLootGroupsBtn.onclick = pasteLootGroupsFromClipboard
    CENTER TARGET SELECT
 ========================= */
 function getPlayerKey(p, idx){
-  const key =
-    normStr(p?.profileId ?? p?.ProfileId ?? p?.profileID ?? p?.ProfileID ??
-            p?.accountId ?? p?.AccountId ?? p?.accountID ?? p?.AccountID ??
-            p?.id ?? p?.Id);
-  if(key) return key;
+  // Prefer server-computed key: "Name|PlayerSide" — always non-null, unique per player in raid
+  const pk = normStr(p?.playerKey ?? p?.PlayerKey);
+  if(pk) return pk;
+  // Fallback: name+typeName, index-free
   const nm = normStr(p?.name ?? p?.Name);
   const tn = normStr(p?.typeName ?? p?.TypeName);
-  return `idx:${idx}:${nm}:${tn}`;
+  return `nm:${nm}:${tn}`;
 }
 
 function playerLabelForSelect(p){
@@ -1862,6 +1916,7 @@ function hideTooltip(){
 
 let hitList = [];
 let lastLocalPlayer = null;
+let lastCenteredPlayer = null;
 let lastMouse = { inside:false, cx:0, cy:0, vx:0, vy:0 };
 
 function pickHoverTarget(mx, my){
@@ -1895,6 +1950,199 @@ function kvRow(k, v, mono=false){
   return `<div class="k">${escapeHtml(k)}</div><div class="v ${mono ? "mono" : ""}">${escapeHtml(v)}</div>`;
 }
 
+function updateAimviewCanvasSize(){
+  if(!aimviewCanvas) return;
+  const s = Math.max(160, Math.min(480, Number(state.aimviewSize) || 260));
+  const h = Math.round(s * 0.75);
+  aimviewCanvas.style.width  = s + "px";
+  aimviewCanvas.style.height = h + "px";
+  aimviewCanvas.width  = s;
+  aimviewCanvas.height = h;
+}
+
+// Segment pairs into SkeletonWorld bone array (matches _boneOrder in WebRadarPlayer.cs):
+// 0=Head 1=Neck 2=UpperTorso 3=MidTorso 4=LowerTorso 5=Pelvis
+// 6=LCollar 7=RCollar 8=LElbow 9=RElbow 10=LHand 11=RHand 12=LKnee 13=RKnee 14=LFoot 15=RFoot
+const SKEL_SEGS_W = [
+  [0,1],[1,2],[2,3],[3,4],[4,5],  // spine: head → pelvis
+  [5,12],[12,14],                  // left leg
+  [5,13],[13,15],                  // right leg
+  [6,8],[8,10],                    // left arm
+  [7,9],[9,11]                     // right arm
+];
+
+// Builds a synthetic view matrix from a player's position and EFT rotation angles.
+// Matches CameraManagerBase.BuildViewMatrix convention exactly.
+function buildAimviewMatrix(px, py, pz, yawDeg, pitchDeg){
+  const yaw   =  yawDeg   * (Math.PI / 180);
+  const pitch = -pitchDeg * (Math.PI / 180); // EFT positive pitch = looking down → negate
+  const cy = Math.cos(yaw), sy = Math.sin(yaw);
+  const cp = Math.cos(pitch), sp = Math.sin(pitch);
+  // Camera basis vectors
+  const fwdX = sy*cp, fwdY = sp,  fwdZ = cy*cp;
+  const rgtX = cy,    rgtY = 0,   rgtZ = -sy;
+  const upX  = -sy*sp, upY = cp,  upZ  = -cy*sp;
+  return {
+    fwdX, fwdY, fwdZ,
+    rgtX, rgtY, rgtZ,
+    upX,  upY,  upZ,
+    m44: -(fwdX*px + fwdY*py + fwdZ*pz),
+    m14: -(rgtX*px + rgtY*py + rgtZ*pz),
+    m24: -(upX*px  + upY*py  + upZ*pz),
+  };
+}
+
+// Projects a single world point through a synthetic view matrix.
+// Returns null if behind the camera.
+function w2sSynth(wx, wy, wz, vm, halfW, halfH){
+  const w = vm.fwdX*wx + vm.fwdY*wy + vm.fwdZ*wz + vm.m44;
+  if(w < 0.098) return null;
+  const x = vm.rgtX*wx + vm.rgtY*wy + vm.rgtZ*wz + vm.m14;
+  const y = vm.upX*wx  + vm.upY*wy  + vm.upZ*wz  + vm.m24;
+  return { px: halfW*(1 + x/w), py: halfH*(1 - y/w) };
+}
+
+function drawAimview(players){
+  if(!state.showAimview || !aimviewCtx || !aimviewCanvas) return;
+  if(aimviewWidget && (aimviewWidget.classList.contains("hidden") || aimviewWidget.classList.contains("minimized"))) return;
+
+  const W = aimviewCanvas.width;
+  const H = aimviewCanvas.height;
+  const halfW = W / 2, halfH = H / 2;
+
+  aimviewCtx.clearRect(0, 0, W, H);
+  aimviewCtx.fillStyle = "rgba(0,0,0,0.88)";
+  aimviewCtx.fillRect(0, 0, W, H);
+
+  const centered = lastCenteredPlayer;
+  if(!centered) {
+    drawAimviewCrosshair(halfW, halfH);
+    return;
+  }
+
+  const centeredIsLocal = !!(centered.isLocal || centered.IsLocal);
+
+  // Synthetic view matrix — used when centered player is not local
+  const cpx = Number(centered.worldX ?? centered.WorldX ?? 0);
+  const cpy = Number(centered.worldY ?? centered.WorldY ?? 0);
+  const cpz = Number(centered.worldZ ?? centered.WorldZ ?? 0);
+  // Yaw from WebRadarPlayer comes as MapRotation (yaw-90), raw Rotation.X is what we need.
+  // Rotation.X is serialized as the Yaw field (degrees, 0-360 already corrected for map).
+  // We need raw EFT yaw = MapRotation + 90.
+  const centeredYaw   = (Number(centered.yaw ?? centered.Yaw ?? 0) + 90);
+  const centeredPitch = Number(centered.pitch ?? centered.Pitch ?? 0);
+  const synthVm = buildAimviewMatrix(cpx, cpy, cpz, centeredYaw, centeredPitch);
+
+  const cx = cpx, cy = cpy, cz = cpz;
+
+  for(const p of players){
+    if(!p || p === centered) continue;
+    if(p?.isAlive === false || p?.IsAlive === false) continue;
+    if(isExtracted(p)) continue;
+
+    const tx = Number(p.worldX ?? p.WorldX ?? NaN);
+    const ty = Number(p.worldY ?? p.WorldY ?? NaN);
+    const tz = Number(p.worldZ ?? p.WorldZ ?? NaN);
+    if(!Number.isFinite(tx) || !Number.isFinite(ty) || !Number.isFinite(tz)) continue;
+
+    const fullDist = Math.sqrt((tx-cx)**2 + (ty-cy)**2 + (tz-cz)**2);
+    const col = playerColor(p);
+
+    if(centeredIsLocal){
+      // Local player: use pre-projected SkeletonScreen (exact game camera, no recomputation needed)
+      const skel = p?.skeletonScreen ?? p?.SkeletonScreen;
+      if(!Array.isArray(skel) || skel.length !== 52) continue;
+      drawAimviewSkel52(skel, W, H, col, fullDist, p);
+    } else {
+      // Non-local centered: project SkeletonWorld through synthetic view matrix
+      const world = p?.skeletonWorld ?? p?.SkeletonWorld;
+      if(!Array.isArray(world) || world.length !== 48) continue;
+
+      // Project all 16 bones; anchor = MidTorso (index 3)
+      const anchorPt = w2sSynth(world[9], world[10], world[11], synthVm, halfW, halfH);
+      if(!anchorPt) continue; // MidTorso behind camera — skip
+
+      const pts = [];
+      for(let i = 0; i < 16; i++){
+        const bx = world[i*3], by = world[i*3+1], bz = world[i*3+2];
+        pts.push(w2sSynth(bx, by, bz, synthVm, halfW, halfH) ?? anchorPt);
+      }
+
+      aimviewCtx.strokeStyle = col;
+      aimviewCtx.lineWidth = 1.5;
+      aimviewCtx.beginPath();
+      for(const [a, b] of SKEL_SEGS_W){
+        aimviewCtx.moveTo(pts[a].px, pts[a].py);
+        aimviewCtx.lineTo(pts[b].px, pts[b].py);
+      }
+      aimviewCtx.stroke();
+
+      if(state.showNames){
+        const nm = String(p?.name ?? p?.Name ?? "");
+        if(nm){
+          aimviewCtx.fillStyle = col;
+          aimviewCtx.font = "10px monospace";
+          aimviewCtx.textAlign = "center";
+          aimviewCtx.textBaseline = "bottom";
+          aimviewCtx.fillText(nm, pts[0].px, pts[0].py - 3);
+        }
+      }
+
+      const fx = (pts[14].px + pts[15].px) / 2;
+      const fy = Math.max(pts[14].py, pts[15].py);
+      aimviewCtx.fillStyle = "rgba(229,231,235,0.85)";
+      aimviewCtx.font = "10px monospace";
+      aimviewCtx.textAlign = "center";
+      aimviewCtx.textBaseline = "top";
+      aimviewCtx.fillText(fullDist.toFixed(0) + "m", fx, fy + 2);
+    }
+  }
+
+  drawAimviewCrosshair(halfW, halfH);
+}
+
+function drawAimviewSkel52(skel, W, H, col, fullDist, p){
+  aimviewCtx.strokeStyle = col;
+  aimviewCtx.lineWidth = 1.5;
+  aimviewCtx.beginPath();
+  for(let i = 0; i < 52; i += 4){
+    aimviewCtx.moveTo(skel[i]   * W, skel[i+1] * H);
+    aimviewCtx.lineTo(skel[i+2] * W, skel[i+3] * H);
+  }
+  aimviewCtx.stroke();
+
+  if(state.showNames){
+    const nm = String(p?.name ?? p?.Name ?? "");
+    if(nm){
+      aimviewCtx.fillStyle = col;
+      aimviewCtx.font = "10px monospace";
+      aimviewCtx.textAlign = "center";
+      aimviewCtx.textBaseline = "bottom";
+      aimviewCtx.fillText(nm, skel[0] * W, skel[1] * H - 3);
+    }
+  }
+
+  const fx = (skel[26] + skel[30]) / 2 * W;
+  const fy = Math.max(skel[27], skel[31]) * H;
+  aimviewCtx.fillStyle = "rgba(229,231,235,0.85)";
+  aimviewCtx.font = "10px monospace";
+  aimviewCtx.textAlign = "center";
+  aimviewCtx.textBaseline = "top";
+  aimviewCtx.fillText(fullDist.toFixed(0) + "m", fx, fy + 2);
+}
+
+function drawAimviewCrosshair(halfW, halfH){
+  const ch = 14, gap = 4;
+  aimviewCtx.strokeStyle = "rgba(255,255,255,0.55)";
+  aimviewCtx.lineWidth = 1;
+  aimviewCtx.beginPath();
+  aimviewCtx.moveTo(halfW - ch, halfH); aimviewCtx.lineTo(halfW - gap, halfH);
+  aimviewCtx.moveTo(halfW + gap, halfH); aimviewCtx.lineTo(halfW + ch, halfH);
+  aimviewCtx.moveTo(halfW, halfH - ch); aimviewCtx.lineTo(halfW, halfH - gap);
+  aimviewCtx.moveTo(halfW, halfH + gap); aimviewCtx.lineTo(halfW, halfH + ch);
+  aimviewCtx.stroke();
+}
+
 function tryWorldXZ(e){
   const wx = pick(e, ["worldX","WorldX","wx","WX"]);
   const wz = pick(e, ["worldZ","WorldZ","wz","WZ"]);
@@ -1905,12 +2153,26 @@ function tryWorldXZ(e){
   if(Number.isFinite(Number(x)) && Number.isFinite(Number(z))) return { x:Number(x), z:Number(z) };
   return null;
 }
+function tryWorldY(e){
+  const wy = pick(e, ["worldY","WorldY","wy","WY"]);
+  if(Number.isFinite(Number(wy))) return Number(wy);
+  const p = e?.position || e?.Position || e?.pos || e?.Pos;
+  const y = p?.y ?? p?.Y;
+  if(Number.isFinite(Number(y))) return Number(y);
+  return null;
+}
 function distanceMeters(a, b){
   const aa = tryWorldXZ(a);
   const bb = tryWorldXZ(b);
   if(!aa || !bb) return null;
   const dx = aa.x - bb.x;
   const dz = aa.z - bb.z;
+  const ay = tryWorldY(a);
+  const by = tryWorldY(b);
+  if(ay !== null && by !== null){
+    const dy = ay - by;
+    return Math.sqrt(dx*dx + dy*dy + dz*dz);
+  }
   return Math.sqrt(dx*dx + dz*dz);
 }
 
@@ -1924,7 +2186,7 @@ function buildPlayerTooltip(p){
 
   const hp = pick(p, ["health","Health","hp","Hp"]);
   const lvl = pick(p, ["level","Level"]);
-  const dist = lastLocalPlayer ? distanceMeters(p, lastLocalPlayer) : null;
+  const dist = lastCenteredPlayer ? distanceMeters(p, lastCenteredPlayer) : null;
 
   const gearValue = pick(p, ["gearValue","GearValue","value","Value","gearPrice","GearPrice","totalValue","TotalValue"]);
   const weapon = pick(p, ["weapon","Weapon","weaponName","WeaponName","primary","Primary"]);
@@ -2815,6 +3077,7 @@ function frame(){
   // find local
   const local = players.find(p => p?.isLocal || p?.IsLocal) || null;
   lastLocalPlayer = local;
+  lastCenteredPlayer = getFollowTarget(players) || local;
 
   // rotation based on local yaw
   const localYaw = local ? toRadMaybe(local?.yaw ?? local?.Yaw ?? 0) : 0;
@@ -2853,7 +3116,7 @@ function frame(){
 
   // draw map
   if(state.showMap && map){
-    const localY = readWorldY(local);
+    const localY = readWorldY(lastCenteredPlayer);
     drawMap(map, localY, cx, cy, state.zoom, lastRotRad, anchor);
   }
 
@@ -2865,10 +3128,12 @@ function frame(){
   // draws
   if(state.showGroups) drawGroupConnectors(players, map, cx, cy, lastRotRad, mapRect);
   if(state.showLoot) drawLoot(loot, map, cx, cy, lastRotRad, mapRect, hitList);
-  if(state.showPlayers) drawPlayers(players, map, cx, cy, lastRotRad, mapRect, readWorldY(local), hitList);
+  if(state.showPlayers) drawPlayers(players, map, cx, cy, lastRotRad, mapRect, readWorldY(lastCenteredPlayer), hitList);
   drawPois(map, cx, cy, lastRotRad, mapRect, hitList);
 
   drawPing(mapRect, cx, cy, lastRotRad);
+
+  drawAimview(players);
 
   // tooltip
   updateHover();

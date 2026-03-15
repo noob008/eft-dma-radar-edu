@@ -28,7 +28,7 @@ namespace eft_dma_radar.Tarkov.Features.MemoryWrites
 
                 if (Enabled != _lastEnabledState)
                 {
-                    writes.AddValueEntry(hardSettingsInstance + Offsets.EFT.EFTHardSettings.MED_EFFECT_USING_PANEL, Enabled);
+                    writes.AddValueEntry(hardSettingsInstance + Offsets.EFTHardSettings.MED_EFFECT_USING_PANEL, Enabled);
 
                     writes.Callbacks += () =>
                     {

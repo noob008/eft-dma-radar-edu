@@ -39,8 +39,8 @@ namespace eft_dma_radar.Tarkov.Features.MemoryWrites
                         ? (ORIGINAL_AIR_CONTROL_SAME_DIR * currentMultiplier, ORIGINAL_AIR_CONTROL_NONE_OR_ORT_DIR * currentMultiplier)
                         : (ORIGINAL_AIR_CONTROL_SAME_DIR, ORIGINAL_AIR_CONTROL_NONE_OR_ORT_DIR);
 
-                    writes.AddValueEntry(hardSettingsInstance + Offsets.EFT.EFTHardSettings.AIR_CONTROL_SAME_DIR, sameDirValue);
-                    writes.AddValueEntry(hardSettingsInstance + Offsets.EFT.EFTHardSettings.AIR_CONTROL_NONE_OR_ORT_DIR, noneOrOrtDirValue);
+                    writes.AddValueEntry(hardSettingsInstance + Offsets.EFTHardSettings.AIR_CONTROL_SAME_DIR, sameDirValue);
+                    writes.AddValueEntry(hardSettingsInstance + Offsets.EFTHardSettings.AIR_CONTROL_NONE_OR_ORT_DIR, noneOrOrtDirValue);
 
                     writes.Callbacks += () =>
                     {

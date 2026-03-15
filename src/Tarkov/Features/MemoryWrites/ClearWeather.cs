@@ -96,7 +96,7 @@ namespace eft_dma_radar.Tarkov.Features.MemoryWrites
 
                 // WeatherController.Instance
                 var controller = Memory.ReadPtr(
-                    staticFieldsBase + Offsets.EFT.WeatherController.Instance);
+                    staticFieldsBase + Offsets.WeatherController.Instance);
 
                 if (!controller.IsValidVirtualAddress())
                     return 0x0;
@@ -108,7 +108,7 @@ namespace eft_dma_radar.Tarkov.Features.MemoryWrites
                 if (!weatherDebug.IsValidVirtualAddress())
                     return 0x0;
 
-                // Optional sanity check ¨C do NOT throw, just bail if weird
+                // Optional sanity check ï¿½C do NOT throw, just bail if weird
                 try
                 {
                     var name = ObjectClass.ReadName(weatherDebug);

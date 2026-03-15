@@ -320,7 +320,147 @@ namespace eft_dma_radar.Tarkov.EFTPlayer.Plugins
             RightFoot = eft_dma_radar.Common.Unity.Bones.HumanRFoot
         }
         /// <summary>
-        /// Return screen coordinates with W2S transformation applied for Box ESP.
+        /// Projects all skeleton bones through the current game camera and returns
+        /// 13 line segments as normalized [0..1] viewport coordinates.
+        /// Format: 13 × 4 floats = [ x1, y1, x2, y2, ... ] (52 total).
+        /// Returns null if the anchor bone (mid-torso) is behind the camera.
+        /// Thread-safe: uses no shared cache fields.
+        /// </summary>
+        public float[]? GetWebRadarScreenBuffer()
+        {
+            var viewport = CameraManagerBase.Viewport;
+            float vw = viewport.Width  > 0 ? viewport.Width  : 1f;
+            float vh = viewport.Height > 0 ? viewport.Height : 1f;
+
+            var midPos = _bones[eft_dma_radar.Common.Unity.Bones.HumanSpine2].Position;
+            if (!CameraManagerBase.WorldToScreen(ref midPos, out var mid))
+                return null;
+
+            SKPoint Get(eft_dma_radar.Common.Unity.Bones b)
+            {
+                var p = _bones[b].Position;
+                return CameraManagerBase.WorldToScreen(ref p, out var s) ? s : mid;
+            }
+
+            var head    = Get(eft_dma_radar.Common.Unity.Bones.HumanHead);
+            var neck    = Get(eft_dma_radar.Common.Unity.Bones.HumanNeck);
+            var upper   = Get(eft_dma_radar.Common.Unity.Bones.HumanSpine3);
+            var lower   = Get(eft_dma_radar.Common.Unity.Bones.HumanSpine1);
+            var pelvis  = Get(eft_dma_radar.Common.Unity.Bones.HumanPelvis);
+            var lCollar = Get(eft_dma_radar.Common.Unity.Bones.HumanLCollarbone);
+            var rCollar = Get(eft_dma_radar.Common.Unity.Bones.HumanRCollarbone);
+            var lElbow  = Get(eft_dma_radar.Common.Unity.Bones.HumanLForearm2);
+            var rElbow  = Get(eft_dma_radar.Common.Unity.Bones.HumanRForearm2);
+            var lHand   = Get(eft_dma_radar.Common.Unity.Bones.HumanLPalm);
+            var rHand   = Get(eft_dma_radar.Common.Unity.Bones.HumanRPalm);
+            var lKnee   = Get(eft_dma_radar.Common.Unity.Bones.HumanLThigh2);
+            var rKnee   = Get(eft_dma_radar.Common.Unity.Bones.HumanRThigh2);
+            var lFoot   = Get(eft_dma_radar.Common.Unity.Bones.HumanLFoot);
+            var rFoot   = Get(eft_dma_radar.Common.Unity.Bones.HumanRFoot);
+
+            var buf = new float[52];
+            int i = 0;
+            void Seg(SKPoint a, SKPoint b)
+            {
+                buf[i++] = a.X / vw; buf[i++] = a.Y / vh;
+                buf[i++] = b.X / vw; buf[i++] = b.Y / vh;
+            }
+
+            Seg(head,    neck);
+            Seg(neck,    upper);
+            Seg(upper,   mid);
+            Seg(mid,     lower);
+            Seg(lower,   pelvis);
+            Seg(pelvis,  lKnee);
+            Seg(lKnee,   lFoot);
+            Seg(pelvis,  rKnee);
+            Seg(rKnee,   rFoot);
+            Seg(lCollar, lElbow);
+            Seg(lElbow,  lHand);
+            Seg(rCollar, rElbow);
+            Seg(rElbow,  rHand);
+
+            return buf;
+        }
+
+        /// <summary>
+        /// Same as <see cref="GetWebRadarScreenBuffer()"/> but projects through a caller-supplied
+        /// <see cref="ViewMatrix"/> instead of the live game camera.
+        /// Used when the web radar is centred on a player other than local.
+        /// </summary>
+        public float[]? GetWebRadarScreenBuffer(ViewMatrix vm)
+        {
+            var viewport = CameraManagerBase.Viewport;
+            float vw = viewport.Width  > 0 ? viewport.Width  : 1f;
+            float vh = viewport.Height > 0 ? viewport.Height : 1f;
+
+            if (!WorldToScreen(ref _bones[eft_dma_radar.Common.Unity.Bones.HumanSpine2].Position, vm, vw, vh, out var mid))
+                return null;
+
+            SKPoint Get(eft_dma_radar.Common.Unity.Bones b)
+            {
+                var p = _bones[b].Position;
+                return WorldToScreen(ref p, vm, vw, vh, out var s) ? s : mid;
+            }
+
+            var head    = Get(eft_dma_radar.Common.Unity.Bones.HumanHead);
+            var neck    = Get(eft_dma_radar.Common.Unity.Bones.HumanNeck);
+            var upper   = Get(eft_dma_radar.Common.Unity.Bones.HumanSpine3);
+            var lower   = Get(eft_dma_radar.Common.Unity.Bones.HumanSpine1);
+            var pelvis  = Get(eft_dma_radar.Common.Unity.Bones.HumanPelvis);
+            var lCollar = Get(eft_dma_radar.Common.Unity.Bones.HumanLCollarbone);
+            var rCollar = Get(eft_dma_radar.Common.Unity.Bones.HumanRCollarbone);
+            var lElbow  = Get(eft_dma_radar.Common.Unity.Bones.HumanLForearm2);
+            var rElbow  = Get(eft_dma_radar.Common.Unity.Bones.HumanRForearm2);
+            var lHand   = Get(eft_dma_radar.Common.Unity.Bones.HumanLPalm);
+            var rHand   = Get(eft_dma_radar.Common.Unity.Bones.HumanRPalm);
+            var lKnee   = Get(eft_dma_radar.Common.Unity.Bones.HumanLThigh2);
+            var rKnee   = Get(eft_dma_radar.Common.Unity.Bones.HumanRThigh2);
+            var lFoot   = Get(eft_dma_radar.Common.Unity.Bones.HumanLFoot);
+            var rFoot   = Get(eft_dma_radar.Common.Unity.Bones.HumanRFoot);
+
+            var buf = new float[52];
+            int i = 0;
+            void Seg(SKPoint a, SKPoint b)
+            {
+                buf[i++] = a.X / vw; buf[i++] = a.Y / vh;
+                buf[i++] = b.X / vw; buf[i++] = b.Y / vh;
+            }
+
+            Seg(head,    neck);
+            Seg(neck,    upper);
+            Seg(upper,   mid);
+            Seg(mid,     lower);
+            Seg(lower,   pelvis);
+            Seg(pelvis,  lKnee);
+            Seg(lKnee,   lFoot);
+            Seg(pelvis,  rKnee);
+            Seg(rKnee,   rFoot);
+            Seg(lCollar, lElbow);
+            Seg(lElbow,  lHand);
+            Seg(rCollar, rElbow);
+            Seg(rElbow,  rHand);
+
+            return buf;
+        }
+
+        // Mirrors CameraManagerBase.WorldToScreen but uses a caller-supplied ViewMatrix.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool WorldToScreen(ref Vector3 worldPos, ViewMatrix vm, float vw, float vh, out SKPoint scrPos)
+        {
+            if (worldPos.LengthSquared() < 1f) { scrPos = default; return false; }
+
+            float w = Vector3.Dot(vm.Translation, worldPos) + vm.M44;
+            if (w < 0.098f) { scrPos = default; return false; }
+
+            float x = Vector3.Dot(vm.Right, worldPos) + vm.M14;
+            float y = Vector3.Dot(vm.Up,    worldPos) + vm.M24;
+
+            float cx = vw / 2f;
+            float cy = vh / 2f;
+            scrPos = new SKPoint(cx * (1f + x / w), cy * (1f - y / w));
+            return true;
+        }
         /// </summary>
         /// <param name="baseScreen">Screen Coords of Base Position.</param>
         /// <returns>Box ESP Screen Coordinates.</returns>
