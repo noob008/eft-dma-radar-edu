@@ -1484,16 +1484,16 @@ namespace eft_dma_radar.UI.Pages
 
         public static LootFilterGroup CreateWeaponAmmoGroup()
         {
-            XMLogging.WriteLine("[Filters] Creating dynamic group for current weapon ammo.");
-
             var groupName = Memory?.LocalPlayer.Hands.CurrentItem;
             var weaponBsgId = Memory?.LocalPlayer.Hands.CurrentItemId;
 
             if (string.IsNullOrEmpty(groupName) || string.IsNullOrEmpty(weaponBsgId))
-            {
-                XMLogging.WriteLine("[Filters] Weapon name or ID is null. Skipping group creation.");
                 return null;
-            }
+
+            if (LootFilterManager.CurrentGroups.Groups.Any(g => g.Name == groupName))
+                return null;
+
+            XMLogging.WriteLine($"[Filters] Creating dynamic group for weapon: {groupName}");
 
             if (!EftDataManager.AllItems.TryGetValue(weaponBsgId, out var weaponItem) ||
                 string.IsNullOrEmpty(weaponItem.Caliber))
@@ -1504,12 +1504,6 @@ namespace eft_dma_radar.UI.Pages
 
             var caliber = weaponItem.Caliber;
             var matchingAmmoIds = AmmoLookup.GetCompatibleAmmo(caliber);
-
-            if (LootFilterManager.CurrentGroups.Groups.Any(g => g.Name == groupName))
-            {
-                XMLogging.WriteLine($"[Filters] Group '{groupName}' already exists. Skipping creation.");
-                return null;
-            }
 
             var dynamicGroup = new LootFilterGroup
             {

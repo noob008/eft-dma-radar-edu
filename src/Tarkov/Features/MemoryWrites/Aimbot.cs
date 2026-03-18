@@ -44,6 +44,9 @@ namespace eft_dma_radar.Tarkov.Features.MemoryWrites
         private sbyte _lastShotIndex = -1;
         private Bones _lastRandomBone = Config.Bone;
         private static bool _ballisticsDiagnosticLogged = false;
+        private int _ballisticsErrorCount;
+        private DateTime _lastBallisticsErrorLog = DateTime.MinValue;
+        private static readonly TimeSpan BallisticsErrorLogCooldown = TimeSpan.FromSeconds(5);
         /// <summary>
         /// Aimbot Info.
         /// </summary>
@@ -786,13 +789,13 @@ namespace eft_dma_radar.Tarkov.Features.MemoryWrites
                 int weaponVersion = Memory.ReadValue<int>(Cache.ItemBase + Offsets.LootItem.Version);
                 if (Cache.LastWeaponVersion != weaponVersion) // New round in chamber
                 {
-                        Application.Current.Dispatcher.Invoke(() =>
-                        {
-                            LootFilterControl.CreateWeaponAmmoGroup();
-                        });
+                    Application.Current.Dispatcher.BeginInvoke(() =>
+                    {
+                        LootFilterControl.CreateWeaponAmmoGroup();
+                    });
                     var ammoTemplate = FirearmManager.MagazineManager.GetAmmoTemplateFromWeapon(Cache.ItemBase);
                     if (Cache.LoadedAmmo != ammoTemplate)
-                    {                        
+                    {
                         XMLogging.WriteLine("[Aimbot] Ammo changed!");
                         Cache.Ballistics.BulletMassGrams = Memory.ReadValue<float>(ammoTemplate + Offsets.AmmoTemplate.BulletMassGram);
                         Cache.Ballistics.BulletDiameterMillimeters =
@@ -818,10 +821,18 @@ namespace eft_dma_radar.Tarkov.Features.MemoryWrites
                     }
                     Cache.LastWeaponVersion = weaponVersion;
                 }
+                _ballisticsErrorCount = 0;
             }
             catch (Exception ex)
             {
-                XMLogging.WriteLine($"Aimbot [WARNING] - Unable to set/update Ballistics: {ex}");
+                _ballisticsErrorCount++;
+                var now = DateTime.UtcNow;
+                if (_ballisticsErrorCount <= 3 || now - _lastBallisticsErrorLog >= BallisticsErrorLogCooldown)
+                {
+                    XMLogging.WriteLine($"Aimbot [WARNING] - Unable to set/update Ballistics: {ex.GetType().Name}: {ex.Message}" +
+                        (_ballisticsErrorCount > 3 ? $" (repeated {_ballisticsErrorCount} times)" : ""));
+                    _lastBallisticsErrorLog = now;
+                }
             }
             /// Target Velocity - Read from appropriate source based on player type
             Vector3 targetVelocity = Vector3.Zero;

@@ -20,6 +20,7 @@ using eft_dma_radar.Common.Misc;
 using eft_dma_radar.Common.Misc.Data;
 using eft_dma_radar.Common.Unity;
 using eft_dma_radar.Tarkov.API;
+using eft_dma_radar.Common.Unity.Collections;
 
 namespace eft_dma_radar.Tarkov.GameWorld
 {

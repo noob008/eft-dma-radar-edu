@@ -582,7 +582,6 @@ namespace eft_dma_radar.Tarkov.Unity.IL2CPP
 
             // GPUInstancerManager (singleton with TypeIndex)
             C("GPUInstancerManager", [
-                F("Instance"),
                 F("runtimeDataList"),
             ], s: true, ti: Offsets.Special.GPUInstancerManager_TypeIndex),
 
@@ -910,12 +909,41 @@ namespace eft_dma_radar.Tarkov.Unity.IL2CPP
             var classes = ReadAllClassesFromTable(tablePtr);
             XMLogging.WriteLine($"[Il2CppDumper] Type table: {classes.Count} classes found.");
 
-            var nameLookup = new Dictionary<string, ulong>(classes.Count, StringComparer.Ordinal);
-            var nameToIndex = new Dictionary<string, int>(classes.Count, StringComparer.Ordinal);
+            var nameLookup  = new Dictionary<string, ulong>(classes.Count * 2, StringComparer.Ordinal);
+            var nameToIndex = new Dictionary<string, int>(classes.Count * 2, StringComparer.Ordinal);
+
+            // Dedup numbering: when multiple classes share the same sanitized base name,
+            // the first is keyed as "World", the second as "World_2", third as "World_3", etc.
+            // This matches the C++ AppSDK naming convention used by the schema.
+            var baseNameSeen = new Dictionary<string, int>(classes.Count, StringComparer.Ordinal);
+
             foreach (var (name, _, ptr, idx) in classes)
             {
+                var san = SanitizeName(name);
+
+                // Index by raw name and sanitized name (first-wins via TryAdd).
                 nameLookup.TryAdd(name, ptr);
                 nameToIndex.TryAdd(name, idx);
+                if (san != name)
+                {
+                    nameLookup.TryAdd(san, ptr);
+                    nameToIndex.TryAdd(san, idx);
+                }
+
+                // Dedup numbering by sanitized base name:
+                // First "World" → key "World", second → "World_2", third → "World_3", etc.
+                if (baseNameSeen.TryGetValue(san, out int seen))
+                {
+                    int next = seen + 1;
+                    baseNameSeen[san] = next;
+                    var dedupKey = $"{san}_{next}";
+                    nameLookup.TryAdd(dedupKey, ptr);
+                    nameToIndex.TryAdd(dedupKey, idx);
+                }
+                else
+                {
+                    baseNameSeen[san] = 1;
+                }
             }
 
             // Dynamically resolve TypeIndex values for known singleton classes.
@@ -1359,6 +1387,22 @@ namespace eft_dma_radar.Tarkov.Unity.IL2CPP
             if (!addr.IsValidVirtualAddress()) return null;
             try { return Memory.ReadString(addr, MaxNameLen, false); }
             catch { return null; }
+        }
+
+        /// <summary>
+        /// Replaces non-alphanumeric/non-underscore characters with '_'.
+        /// e.g. "World`2" → "World_2", "SlotView`2" → "SlotView_2"
+        /// </summary>
+        private static string SanitizeName(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return name;
+            var sb = new char[name.Length];
+            for (int i = 0; i < name.Length; i++)
+            {
+                char c = name[i];
+                sb[i] = char.IsLetterOrDigit(c) || c == '_' ? c : '_';
+            }
+            return new string(sb);
         }
     }
 }

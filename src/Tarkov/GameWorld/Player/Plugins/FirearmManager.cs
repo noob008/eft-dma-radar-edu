@@ -440,7 +440,12 @@ namespace eft_dma_radar.Tarkov.EFTPlayer.Plugins
                 try
                 {
                     if (chambersPtr != 0x0 && (chambers = MemArray<Chamber>.Get(chambersPtr)).Count > 0) // Single chamber, or for some shotguns, multiple chambers
-                        firstRound = Memory.ReadPtr(chambers.First(x => x.HasBullet(true)) + Offsets.Slot.ContainedItem);
+                    {
+                        var loaded = chambers.FirstOrDefault(x => x.HasBullet(true));
+                        if (loaded == default)
+                            throw new InvalidOperationException("No loaded round found in chambers");
+                        firstRound = Memory.ReadPtr(loaded + Offsets.Slot.ContainedItem);
+                    }
                     else
                     {
                         var magSlot = Memory.ReadPtr(lootItemBase + Offsets.LootItemWeapon._magSlotCache);
@@ -448,7 +453,12 @@ namespace eft_dma_radar.Tarkov.EFTPlayer.Plugins
                         var magChambersPtr = Memory.ReadPtr(magItemPtr + Offsets.LootItemMod.Slots);
                         magChambers = MemArray<Chamber>.Get(magChambersPtr);
                         if (magChambers.Count > 0) // Revolvers, etc.
-                            firstRound = Memory.ReadPtr(magChambers.First(x => x.HasBullet(true)) + Offsets.Slot.ContainedItem);
+                        {
+                            var loaded = magChambers.FirstOrDefault(x => x.HasBullet(true));
+                            if (loaded == default)
+                                throw new InvalidOperationException("No loaded round found in magazine chambers");
+                            firstRound = Memory.ReadPtr(loaded + Offsets.Slot.ContainedItem);
+                        }
                         else // Regular magazines
                         {
                             var cartridges = Memory.ReadPtr(magItemPtr + Offsets.LootItemMagazine.Cartridges);
