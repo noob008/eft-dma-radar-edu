@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Threading;
 using eft_dma_radar.Common.DMA.ScatterAPI;
 using eft_dma_radar.Common.Misc;
 using SDK;
@@ -100,11 +101,27 @@ namespace eft_dma_radar.Tarkov.Unity.IL2CPP
             }
 
             // Scan the full type table — needed for name lookups AND TypeIndex resolution.
-            var classes = ReadAllClassesFromTable(tablePtr);
+            // Retry up to 10 times (with 1s delay) for transient DMA failures during loading.
+            const int MinExpectedClasses = 1_000;
+            const int maxRetries = 10;
+            List<(string Name, string Namespace, ulong KlassPtr, int Index)> classes = null;
+
+            for (int attempt = 1; attempt <= maxRetries; attempt++)
+            {
+                classes = ReadAllClassesFromTable(tablePtr);
+
+                if (classes.Count >= MinExpectedClasses)
+                    break;
+
+                if (attempt < maxRetries)
+                {
+                    XMLogging.WriteLine($"[Il2CppDumper] Only {classes.Count} classes found (expected ≥{MinExpectedClasses}), retrying... ({attempt}/{maxRetries})");
+                    Thread.Sleep(1000);
+                }
+            }
 
             // Sanity gate: a healthy IL2CPP binary has tens of thousands of classes.
             // If we found very few, the table pointer is likely stale or corrupt.
-            const int MinExpectedClasses = 1_000;
             if (classes.Count < MinExpectedClasses)
             {
                 XMLogging.WriteLine($"[Il2CppDumper] ABORT: Only {classes.Count} classes found (expected ≥{MinExpectedClasses}) — TypeInfoTable likely corrupt or stale.");
@@ -350,23 +367,51 @@ namespace eft_dma_radar.Tarkov.Unity.IL2CPP
         /// <summary>
         /// Reads all IL2CppClass* entries from a pre-resolved type-info table pointer.
         /// Uses scatter reads to batch all DMA operations (2 scatter rounds instead of ~4 reads per class).
+        /// Reads the pointer array in chunks to avoid oversized DMA reads during early loading.
         /// </summary>
         private static List<(string Name, string Namespace, ulong KlassPtr, int Index)> ReadAllClassesFromTable(ulong tablePtr)
         {
             var result = new List<(string, string, ulong, int)>(4096);
 
-            // Step 1: Bulk read all class pointers (contiguous array — single DMA read).
-            ulong[] ptrs;
-            try { ptrs = Memory.ReadArray<ulong>(tablePtr, MaxClasses, false); }
-            catch (Exception ex)
+            // Step 1: Read all class pointers in chunks to handle partially-mapped memory.
+            const int chunkSize = 4096;
+            var allPtrs = new List<ulong>(MaxClasses);
+
+            for (int offset = 0; offset < MaxClasses; offset += chunkSize)
             {
-                XMLogging.WriteLine($"[Il2CppDumper] ReadArray failed: {ex.Message}");
-                return result;
+                int toRead = Math.Min(chunkSize, MaxClasses - offset);
+                ulong[] chunk;
+                try { chunk = Memory.ReadArray<ulong>(tablePtr + (ulong)offset * 8, toRead, false); }
+                catch (Exception ex)
+                {
+                    if (allPtrs.Count == 0)
+                        XMLogging.WriteLine($"[Il2CppDumper] ReadArray failed: {ex.Message}");
+                    break; // DMA failure — use whatever we've read so far
+                }
+
+                // Check if this chunk has any valid entries.
+                bool hasValid = false;
+                for (int i = 0; i < chunk.Length; i++)
+                {
+                    if (chunk[i].IsValidVirtualAddress())
+                        hasValid = true;
+                }
+
+                allPtrs.AddRange(chunk);
+
+                // If this chunk had no valid entries, we've passed the end of the table.
+                if (!hasValid)
+                    break;
             }
 
+            if (allPtrs.Count == 0)
+                return result;
+
+            var ptrs = allPtrs;
+
             // Collect indices of valid class pointers.
-            var validIndices = new List<int>(ptrs.Length / 2);
-            for (int i = 0; i < ptrs.Length; i++)
+            var validIndices = new List<int>(ptrs.Count / 2);
+            for (int i = 0; i < ptrs.Count; i++)
             {
                 if (ptrs[i].IsValidVirtualAddress())
                     validIndices.Add(i);

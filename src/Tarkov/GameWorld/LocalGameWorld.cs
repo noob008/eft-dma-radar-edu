@@ -131,35 +131,14 @@ namespace eft_dma_radar.Tarkov.GameWorld
         {
             XMLogging.WriteLine("[Raid] Waiting for raid to be fully ready...");
 
-            // Phase 1: Wait for camera to be available
-            const int maxCameraAttempts = 60; // 30 seconds max wait
-            int attempts = 0;
-            while (attempts++ < maxCameraAttempts)
-            {
-                ct.ThrowIfCancellationRequested();
-
-                try
-                {
-                    CameraManager.Initialize();
-                    CameraManager = new CameraManager();
-                    CameraManager.FPSCamera.ThrowIfInvalidVirtualAddress();
-                    XMLogging.WriteLine("[Raid] Camera detected!");
-                    break;
-                }
-                catch
-                {
-                    CameraManager = null;
-                    if (attempts % 10 == 0)
-                        XMLogging.WriteLine($"[Raid] Still waiting for camera... attempt {attempts}/{maxCameraAttempts}");
-                    ct.WaitHandle.WaitOne(500);
-                }
-            }
+            // Camera resolution is handled lazily by RefreshCameraManager() in FastWorker.
+            // Loading times vary, so we don't block on camera here.
 
             XMLogging.WriteLine("[Raid] Waiting for LocalPlayer to be fully in raid...");
 
             // Phase 2: Wait for LocalPlayer to be valid (RegisteredPlayers list populated)
             const int maxPlayerAttempts = 60; // 30 seconds max wait
-            attempts = 0;
+            int attempts = 0;
             while (attempts++ < maxPlayerAttempts)
             {
                 ct.ThrowIfCancellationRequested();
@@ -994,11 +973,16 @@ namespace eft_dma_radar.Tarkov.GameWorld
         {
             try
             {
-                CameraManager ??= new CameraManager();
+                if (CameraManager is null)
+                {
+                    CameraManager.Initialize();
+                    CameraManager = new CameraManager();
+                    XMLogging.WriteLine("[CameraManager] Camera resolved!");
+                }
             }
             catch
             {
-                // Swallow ¡§C camera can fail transiently during transitions
+                // Camera can fail transiently during loading/transitions — retry next tick
             }
         }
 
