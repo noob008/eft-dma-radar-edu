@@ -1,4 +1,5 @@
-﻿using eft_dma_radar.Common.Misc;
+﻿#pragma warning disable CS0162 // Unreachable code detected (HARD_DISABLE_ALL_MEMWRITES const)
+using eft_dma_radar.Common.Misc;
 using eft_dma_radar.Tarkov.Features.MemoryWrites;
 using eft_dma_radar.Tarkov.GameWorld;
 

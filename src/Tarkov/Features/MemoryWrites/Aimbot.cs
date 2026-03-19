@@ -1,4 +1,5 @@
-﻿using eft_dma_radar.Tarkov.EFTPlayer;
+﻿#pragma warning disable CS0162 // Unreachable code detected (SILENT_AIM_DRY_RUN const)
+using eft_dma_radar.Tarkov.EFTPlayer;
 using eft_dma_radar.Tarkov.EFTPlayer.Plugins;
 using eft_dma_radar.Tarkov.GameWorld;
 using eft_dma_radar.UI.Misc;

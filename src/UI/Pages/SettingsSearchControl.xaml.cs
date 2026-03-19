@@ -69,7 +69,7 @@ namespace eft_dma_radar.UI.Pages
                 InitializeControlEvents();
                 LoadSettings(); // your existing binding/indexing
 
-                Dispatcher.BeginInvoke(new Action(() =>
+                _ = Dispatcher.BeginInvoke(new Action(() =>
                 {
                     SetVerticalOffset(ResultsList, resultsOffset);
                 }), DispatcherPriority.Loaded);

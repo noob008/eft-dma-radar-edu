@@ -396,7 +396,7 @@ namespace eft_dma_radar.UI.ESP
             ESPConfig.TopLootOffset = new PointFSer(_uiElements[UIElement.TopLoot].Offset.X, _uiElements[UIElement.TopLoot].Offset.Y);
             ESPConfig.KillfeedOffset = new PointFSer(_uiElements[UIElement.Killfeed].Offset.X, _uiElements[UIElement.Killfeed].Offset.Y);
 
-            Config.SaveAsync();
+            _ = Config.SaveAsync();
         }
 
         /// <summary>

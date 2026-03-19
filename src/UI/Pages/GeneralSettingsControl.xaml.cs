@@ -181,7 +181,7 @@ namespace eft_dma_radar.UI.Pages
 
                     InitializeControlEvents();
                     LoadSettings();
-                    InitializeConfigTab();
+                    await InitializeConfigTab();
                 }
                 catch (TimeoutException ex)
                 {
