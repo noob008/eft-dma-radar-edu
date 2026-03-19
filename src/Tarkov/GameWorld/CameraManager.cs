@@ -6,6 +6,7 @@
  */
 
 using System;
+using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -89,6 +90,7 @@ namespace eft_dma_radar.Tarkov.GameWorld
                     return;
                 }
 
+                DebugDumpState();
                 XMLogging.WriteLine($"[CameraManager] OK Initialized CameraManager.Instance @ 0x{_eftCameraManagerInstance:X}");
             }
             catch (Exception ex)
@@ -380,8 +382,7 @@ namespace eft_dma_radar.Tarkov.GameWorld
                 return 0;
             }
 
-            // DEBUG: Uncomment to test all signatures and log which ones are still valid
-            //DebugTestAllSignatures();
+            DebugTestAllSignatures();
 
             // Try signature scan first
             foreach (var (sig, relOff, instrLen, desc) in AllCamerasSigs)
@@ -398,17 +399,13 @@ namespace eft_dma_radar.Tarkov.GameWorld
                     if (!resolved.IsValidVirtualAddress())
                         continue;
 
-                    // Validate: the resolved address should point to a list with a valid items pointer
                     var listPtr = Memory.ReadPtr(resolved, false);
                     if (listPtr.IsValidVirtualAddress())
                     {
                         var items = Memory.ReadPtr(listPtr, false);
                         int count = Memory.ReadValue<int>(listPtr + 0x8, false);
                         if (items.IsValidVirtualAddress() && count >= 0 && count < 1024)
-                        {
-                            XMLogging.WriteLine($"[CameraManager] AllCameras resolved via sig scan ({desc}): 0x{resolved:X}");
                             return resolved;
-                        }
                     }
                 }
                 catch
@@ -421,18 +418,20 @@ namespace eft_dma_radar.Tarkov.GameWorld
             var fallbackAddr = unityBase + ModuleBase.AllCameras;
             if (fallbackAddr.IsValidVirtualAddress())
             {
-                XMLogging.WriteLine($"[CameraManager] AllCameras using hardcoded fallback: 0x{fallbackAddr:X}");
+                XMLogging.WriteLine("[CameraManager] AllCameras using hardcoded fallback");
                 return fallbackAddr;
             }
 
-            XMLogging.WriteLine("[CameraManager] AllCameras resolution failed — all strategies exhausted.");
+            XMLogging.WriteLine("[CameraManager] AllCameras resolution FAILED");
             return 0;
         }
 
         /// <summary>
-        /// DEBUG: Tests all signatures (AllCameras + Camera struct offsets) and logs which ones still resolve correctly.
-        /// Call from Initialize() to audit signature health after game updates.
+        /// DEBUG: Tests all signatures (AllCameras + Camera struct offsets) and stores results for
+        /// deferred output inside <see cref="DebugDumpState"/>.
+        /// Automatically runs in Debug builds; fully stripped in Release.
         /// </summary>
+        [Conditional("DEBUG")]
         private static void DebugTestAllSignatures()
         {
             var unityBase = Memory.UnityBase;
@@ -442,10 +441,12 @@ namespace eft_dma_radar.Tarkov.GameWorld
                 return;
             }
 
-            XMLogging.WriteLine("[CameraManager] ===== DEBUG: Signature Health Audit =====");
+            const string tag = "[CameraManager]";
+            var bodyLines = new List<string>
+            {
+                "AllCameras Signatures",
+            };
 
-            // --- AllCameras signatures ---
-            XMLogging.WriteLine("[CameraManager] --- AllCameras Signatures ---");
             for (int idx = 0; idx < AllCamerasSigs.Length; idx++)
             {
                 var (sig, relOff, instrLen, desc) = AllCamerasSigs[idx];
@@ -454,7 +455,7 @@ namespace eft_dma_radar.Tarkov.GameWorld
                     var sigAddr = Memory.FindSignature(sig, "UnityPlayer.dll");
                     if (sigAddr == 0)
                     {
-                        XMLogging.WriteLine($"[CameraManager]   [{idx}] MISS  — {desc}");
+                        bodyLines.Add($"[{idx}] MISS — {desc}");
                         continue;
                     }
 
@@ -479,33 +480,65 @@ namespace eft_dma_radar.Tarkov.GameWorld
                             int count = Memory.ReadValue<int>(listPtr + 0x8, false);
                             bool valid = items.IsValidVirtualAddress() && count >= 0 && count < 1024;
                             status = valid
-                                ? $"OK resolved=0x{resolved:X} RVA=0x{resolved - unityBase:X} count={count}"
+                                ? $"OK 0x{resolved:X} RVA=0x{resolved - unityBase:X} count={count}"
                                 : $"INVALID items=0x{items:X} count={count}";
                         }
                     }
 
-                    XMLogging.WriteLine($"[CameraManager]   [{idx}] {status} — {desc} (matched at UnityPlayer+0x{sigAddr - unityBase:X})");
+                    bodyLines.Add($"[{idx}] {status} — {desc} (UP+0x{sigAddr - unityBase:X})");
                 }
                 catch (Exception ex)
                 {
-                    XMLogging.WriteLine($"[CameraManager]   [{idx}] ERROR {ex.Message} — {desc}");
+                    bodyLines.Add($"[{idx}] ERROR {ex.Message} — {desc}");
                 }
             }
 
-            // --- Camera struct offset signatures ---
-            DebugTestCameraOffsetSigs("ViewMatrix", ViewMatrixSigs, UnityOffsets.Camera.ViewMatrix, unityBase);
-            DebugTestCameraOffsetSigs("FOV", FovSigs, UnityOffsets.Camera.FOV, unityBase);
-            DebugTestCameraOffsetSigs("AspectRatio", AspectRatioSigs, UnityOffsets.Camera.AspectRatio, unityBase);
+            // Camera struct offset signatures
+            DebugTestCameraOffsetSigs(bodyLines, "ViewMatrix", ViewMatrixSigs, UnityOffsets.Camera.ViewMatrix, unityBase);
+            DebugTestCameraOffsetSigs(bodyLines, "FOV", FovSigs, UnityOffsets.Camera.FOV, unityBase);
+            DebugTestCameraOffsetSigs(bodyLines, "AspectRatio", AspectRatioSigs, UnityOffsets.Camera.AspectRatio, unityBase);
 
-            XMLogging.WriteLine("[CameraManager] ===== END DEBUG =====");
+            // Auto-size: W = inner width between │ and │ (or ┌ and ┐)
+            const string title = "Signature Health Audit";
+            int W = title.Length + 4; // "─ title ─" minimum
+            foreach (var line in bodyLines)
+                if (line.Length + 2 > W) // " content " padding
+                    W = line.Length + 2;
+
+            var lines = new List<string>(bodyLines.Count + 2);
+            {
+                int dashTotal = W - title.Length - 2; // 2 spaces around title
+                int dashLeft = dashTotal / 2;
+                int dashRight = dashTotal - dashLeft;
+                lines.Add($"{tag} ┌{new string('─', dashLeft)} {title} {new string('─', dashRight)}┐");
+            }
+            foreach (var body in bodyLines)
+            {
+                if (body.StartsWith('['))
+                {
+                    lines.Add($"{tag} │ {body.PadRight(W - 1)}│");
+                }
+                else
+                {
+                    int pad = W - body.Length;
+                    int left = pad / 2;
+                    int right = pad - left;
+                    lines.Add($"{tag} │{new string(' ', left)}{body}{new string(' ', right)}│");
+                }
+            }
+            lines.Add($"{tag} └{new string('─', W)}┘");
+
+#if DEBUG
+            _sigAuditLines = lines;
+#endif
         }
 
         /// <summary>
-        /// DEBUG helper: tests a set of Camera struct offset signatures and logs results.
+        /// DEBUG helper: tests a set of Camera struct offset signatures and appends results to the buffer.
         /// </summary>
-        private static void DebugTestCameraOffsetSigs(string fieldName, CameraOffsetSig[] sigs, uint currentValue, ulong unityBase)
+        private static void DebugTestCameraOffsetSigs(List<string> bodyLines, string fieldName, CameraOffsetSig[] sigs, uint currentValue, ulong unityBase)
         {
-            XMLogging.WriteLine($"[CameraManager] --- {fieldName} Signatures (current=0x{currentValue:X}) ---");
+            bodyLines.Add($"{fieldName} Signatures (current=0x{currentValue:X})");
             for (int idx = 0; idx < sigs.Length; idx++)
             {
                 var entry = sigs[idx];
@@ -514,22 +547,22 @@ namespace eft_dma_radar.Tarkov.GameWorld
                     var sigAddr = Memory.FindSignature(entry.Sig, "UnityPlayer.dll");
                     if (sigAddr == 0)
                     {
-                        XMLogging.WriteLine($"[CameraManager]   [{idx}] MISS  — {entry.Desc}");
+                        bodyLines.Add($"[{idx}] MISS — {entry.Desc}");
                         continue;
                     }
 
-                    string matchInfo = $"matched at UnityPlayer+0x{sigAddr - unityBase:X}";
+                    string matchInfo = $"UP+0x{sigAddr - unityBase:X}";
                     uint offset;
 
                     if (entry.IsCallSite)
                     {
                         int callRel32 = Memory.ReadValue<int>(sigAddr + (ulong)entry.OffsetPos + 1, false);
                         ulong callTarget = sigAddr + 5 + (ulong)(long)callRel32;
-                        matchInfo += $" → call target UnityPlayer+0x{callTarget - unityBase:X}";
+                        matchInfo += $" → UP+0x{callTarget - unityBase:X}";
 
                         if (!callTarget.IsValidVirtualAddress())
                         {
-                            XMLogging.WriteLine($"[CameraManager]   [{idx}] BAD CALL TARGET — {entry.Desc} ({matchInfo})");
+                            bodyLines.Add($"[{idx}] BAD CALL TARGET — {entry.Desc} ({matchInfo})");
                             continue;
                         }
 
@@ -559,13 +592,106 @@ namespace eft_dma_radar.Tarkov.GameWorld
                         _ => $"BAD offset=0x{offset:X}",
                     };
 
-                    XMLogging.WriteLine($"[CameraManager]   [{idx}] {status} — {entry.Desc} ({matchInfo})");
+                    bodyLines.Add($"[{idx}] {status} — {entry.Desc} ({matchInfo})");
                 }
                 catch (Exception ex)
                 {
-                    XMLogging.WriteLine($"[CameraManager]   [{idx}] ERROR {ex.Message} — {entry.Desc}");
+                    bodyLines.Add($"[{idx}] ERROR {ex.Message} — {entry.Desc}");
                 }
             }
+        }
+
+        #if DEBUG
+        /// <summary>
+        /// Sig audit lines collected by <see cref="DebugTestAllSignatures"/> for
+        /// deferred output inside <see cref="DebugDumpState"/>.
+        /// </summary>
+        private static List<string>? _sigAuditLines;
+#endif
+
+        /// <summary>
+        /// DEBUG: Dumps a comprehensive summary of all resolved addresses and offsets.
+        /// Includes the deferred sig audit box from <see cref="DebugTestAllSignatures"/>.
+        /// Automatically runs in Debug builds after successful initialization.
+        /// </summary>
+        [Conditional("DEBUG")]
+        private static void DebugDumpState()
+        {
+            const int W = 54;
+            const string tag = "[CameraManager]";
+            var gaBase = Memory.GameAssemblyBase;
+            var unityBase = Memory.UnityBase;
+
+            string Row(string text) => $"║  {text.PadRight(W - 2)}║";
+            string Header(string text)
+            {
+                int pad = W - text.Length;
+                int left = pad / 2;
+                int right = pad - left;
+                return $"║{new string(' ', left)}{text}{new string(' ', right)}║";
+            }
+            string Sep(string label) => $"╠── {label} {"".PadRight(W - 4 - label.Length, '─')}╣";
+
+            var lines = new List<string>();
+
+#if DEBUG
+            // Prepend the deferred sig audit box so both appear together.
+            if (_sigAuditLines is not null)
+            {
+                lines.AddRange(_sigAuditLines);
+                _sigAuditLines = null;
+            }
+#endif
+
+            lines.Add($"{tag} ╔{new string('═', W)}╗");
+            lines.Add($"{tag} {Header("Camera Manager — Debug State")}");
+            lines.Add($"{tag} ╠{new string('═', W)}╣");
+            lines.Add($"{tag} {Row($"GameAssembly Base:  {FormatPtr(gaBase)}")}");
+            lines.Add($"{tag} {Row($"UnityPlayer Base:   {FormatPtr(unityBase)}")}");
+            lines.Add($"{tag} {Sep("Resolved Pointers")}");
+            lines.Add($"{tag} {Row($"CameraManager:      {FormatPtr(_eftCameraManagerInstance)}")}");
+            lines.Add($"{tag} {Row($"AllCameras Addr:    {FormatPtr(_allCamerasAddr)}")}");
+            lines.Add($"{tag} {Sep("Camera Struct Offsets")}");
+            lines.Add($"{tag} {Row($"ViewMatrix:         0x{UnityOffsets.Camera.ViewMatrix:X}")}");
+            lines.Add($"{tag} {Row($"FOV:                0x{UnityOffsets.Camera.FOV:X}")}");
+            lines.Add($"{tag} {Row($"AspectRatio:        0x{UnityOffsets.Camera.AspectRatio:X}")}");
+            lines.Add($"{tag} {Sep("SDK Offsets (EFTCameraManager)")}");
+            lines.Add($"{tag} {Row($"GetInstance_RVA:    0x{Offsets.EFTCameraManager.GetInstance_RVA:X}")}");
+            lines.Add($"{tag} {Row($"Camera:             0x{Offsets.EFTCameraManager.Camera:X}")}");
+            lines.Add($"{tag} {Row($"OpticCameraManager: 0x{Offsets.EFTCameraManager.OpticCameraManager:X}")}");
+            lines.Add($"{tag} {Sep("Signature Health")}");
+            lines.Add($"{tag} {Row($"AllCameras:   {CountValidSigs(AllCamerasSigs, "UnityPlayer.dll")}/{AllCamerasSigs.Length} sigs valid")}");
+            lines.Add($"{tag} {Row($"ViewMatrix:   {CountValidSigs(ViewMatrixSigs, "UnityPlayer.dll")}/{ViewMatrixSigs.Length} sigs valid")}");
+            lines.Add($"{tag} {Row($"FOV:          {CountValidSigs(FovSigs, "UnityPlayer.dll")}/{FovSigs.Length} sigs valid")}");
+            lines.Add($"{tag} {Row($"AspectRatio:  {CountValidSigs(AspectRatioSigs, "UnityPlayer.dll")}/{AspectRatioSigs.Length} sigs valid")}");
+            lines.Add($"{tag} ╚{new string('═', W)}╝");
+
+            XMLogging.WriteBlock(lines);
+        }
+
+        private static string FormatPtr(ulong ptr) =>
+            ptr.IsValidVirtualAddress() ? $"0x{ptr:X}" : "(not resolved)";
+
+        private static int CountValidSigs((string Sig, int, int, string)[] sigs, string module)
+        {
+            int count = 0;
+            foreach (var (sig, _, _, _) in sigs)
+            {
+                try { if (Memory.FindSignature(sig, module) != 0) count++; }
+                catch { /* skip */ }
+            }
+            return count;
+        }
+
+        private static int CountValidSigs(CameraOffsetSig[] sigs, string module)
+        {
+            int count = 0;
+            foreach (var entry in sigs)
+            {
+                try { if (Memory.FindSignature(entry.Sig, module) != 0) count++; }
+                catch { /* skip */ }
+            }
+            return count;
         }
 
         #region Camera Struct Offset Resolution
@@ -627,52 +753,29 @@ namespace eft_dma_radar.Tarkov.GameWorld
             if (!unityBase.IsValidVirtualAddress())
                 return;
 
-            // ViewMatrix
-            var vm = TryResolveCameraOffset(ViewMatrixSigs, "ViewMatrix", unityBase);
-            if (vm.HasValue && vm.Value != UnityOffsets.Camera.ViewMatrix)
-            {
-                XMLogging.WriteLine($"[CameraManager] Camera.ViewMatrix updated: 0x{UnityOffsets.Camera.ViewMatrix:X} → 0x{vm.Value:X}");
-                UnityOffsets.Camera.ViewMatrix = vm.Value;
-            }
-            else if (vm.HasValue)
-            {
-                XMLogging.WriteLine($"[CameraManager] Camera.ViewMatrix confirmed: 0x{vm.Value:X}");
-            }
-            else
-            {
-                XMLogging.WriteLine($"[CameraManager] Camera.ViewMatrix sig scan FAILED — using hardcoded default 0x{UnityOffsets.Camera.ViewMatrix:X}");
-            }
+            ApplyCameraOffset(ViewMatrixSigs, "ViewMatrix", unityBase,
+                ref UnityOffsets.Camera.ViewMatrix);
+            ApplyCameraOffset(FovSigs, "FOV", unityBase,
+                ref UnityOffsets.Camera.FOV);
+            ApplyCameraOffset(AspectRatioSigs, "AspectRatio", unityBase,
+                ref UnityOffsets.Camera.AspectRatio);
+        }
 
-            // FOV
-            var fov = TryResolveCameraOffset(FovSigs, "FOV", unityBase);
-            if (fov.HasValue && fov.Value != UnityOffsets.Camera.FOV)
+        /// <summary>
+        /// Resolves a Camera struct field offset via sig scan and applies it.
+        /// Logs only on change or failure — confirmed matches are silent.
+        /// </summary>
+        private static void ApplyCameraOffset(CameraOffsetSig[] sigs, string fieldName, ulong unityBase, ref uint target)
+        {
+            var resolved = TryResolveCameraOffset(sigs, fieldName, unityBase);
+            if (resolved.HasValue && resolved.Value != target)
             {
-                XMLogging.WriteLine($"[CameraManager] Camera.FOV updated: 0x{UnityOffsets.Camera.FOV:X} → 0x{fov.Value:X}");
-                UnityOffsets.Camera.FOV = fov.Value;
+                XMLogging.WriteLine($"[CameraManager] Camera.{fieldName} UPDATED: 0x{target:X} → 0x{resolved.Value:X}");
+                target = resolved.Value;
             }
-            else if (fov.HasValue)
+            else if (!resolved.HasValue)
             {
-                XMLogging.WriteLine($"[CameraManager] Camera.FOV confirmed: 0x{fov.Value:X}");
-            }
-            else
-            {
-                XMLogging.WriteLine($"[CameraManager] Camera.FOV sig scan FAILED — using hardcoded default 0x{UnityOffsets.Camera.FOV:X}");
-            }
-
-            // AspectRatio
-            var aspect = TryResolveCameraOffset(AspectRatioSigs, "AspectRatio", unityBase);
-            if (aspect.HasValue && aspect.Value != UnityOffsets.Camera.AspectRatio)
-            {
-                XMLogging.WriteLine($"[CameraManager] Camera.AspectRatio updated: 0x{UnityOffsets.Camera.AspectRatio:X} → 0x{aspect.Value:X}");
-                UnityOffsets.Camera.AspectRatio = aspect.Value;
-            }
-            else if (aspect.HasValue)
-            {
-                XMLogging.WriteLine($"[CameraManager] Camera.AspectRatio confirmed: 0x{aspect.Value:X}");
-            }
-            else
-            {
-                XMLogging.WriteLine($"[CameraManager] Camera.AspectRatio sig scan FAILED — using hardcoded default 0x{UnityOffsets.Camera.AspectRatio:X}");
+                XMLogging.WriteLine($"[CameraManager] Camera.{fieldName} sig scan FAILED — using hardcoded 0x{target:X}");
             }
         }
 
@@ -692,7 +795,6 @@ namespace eft_dma_radar.Tarkov.GameWorld
                     var sigAddr = Memory.FindSignature(entry.Sig, "UnityPlayer.dll");
                     if (sigAddr == 0)
                     {
-                        XMLogging.WriteLine($"[CameraManager] Camera.{fieldName} sig MISS — {entry.Desc}");
                         continue;
                     }
 
@@ -700,19 +802,12 @@ namespace eft_dma_radar.Tarkov.GameWorld
 
                     if (entry.IsCallSite)
                     {
-                        // Resolve E8 rel32 call target
-                        int callRel32 = Memory.ReadValue<int>(sigAddr + (ulong)entry.OffsetPos + 1, false); // +1 to skip the E8 opcode
-                        ulong callTarget = sigAddr + 5 + (ulong)(long)callRel32; // E8 instruction is 5 bytes
+                        int callRel32 = Memory.ReadValue<int>(sigAddr + (ulong)entry.OffsetPos + 1, false);
+                        ulong callTarget = sigAddr + 5 + (ulong)(long)callRel32;
 
                         if (!callTarget.IsValidVirtualAddress())
-                        {
-                            XMLogging.WriteLine($"[CameraManager] Camera.{fieldName} BAD CALL TARGET 0x{callTarget:X} — {entry.Desc} (sig at UnityPlayer+0x{sigAddr - unityBase:X})");
                             continue;
-                        }
 
-                        XMLogging.WriteLine($"[CameraManager] Camera.{fieldName} call-site at UnityPlayer+0x{sigAddr - unityBase:X} → target UnityPlayer+0x{callTarget - unityBase:X}");
-
-                        // Read displacement from the target function body
                         offset = entry.TargetBodyDispSize switch
                         {
                             1 => Memory.ReadValue<byte>(callTarget + (ulong)entry.TargetBodyDispOffset, false),
@@ -722,15 +817,12 @@ namespace eft_dma_radar.Tarkov.GameWorld
                     }
                     else
                     {
-                        // Direct: read displacement from the sig match itself
                         offset = entry.DispSize switch
                         {
                             1 => Memory.ReadValue<byte>(sigAddr + (ulong)entry.OffsetPos, false),
                             4 => Memory.ReadValue<uint>(sigAddr + (ulong)entry.OffsetPos, false),
                             _ => 0,
                         };
-
-                        XMLogging.WriteLine($"[CameraManager] Camera.{fieldName} direct match at UnityPlayer+0x{sigAddr - unityBase:X} → disp=0x{offset:X}");
                     }
 
                     // Sanity: Camera struct offsets should be reasonable (< 0x1000)
@@ -739,11 +831,11 @@ namespace eft_dma_radar.Tarkov.GameWorld
                         return offset;
                     }
 
-                    XMLogging.WriteLine($"[CameraManager] Camera.{fieldName} offset 0x{offset:X} out of range — {entry.Desc}");
+                    // Offset out of range, try next sig
                 }
-                catch (Exception ex)
+                catch
                 {
-                    XMLogging.WriteLine($"[CameraManager] Camera.{fieldName} ERROR: {ex.Message} — {entry.Desc}");
+                    // Sig failed, try next
                 }
             }
 
@@ -767,10 +859,7 @@ namespace eft_dma_radar.Tarkov.GameWorld
                     return 0;
                 }
 
-                // Calculate get_Instance method address
                 ulong methodAddr = gameAssemblyBase + Offsets.EFTCameraManager.GetInstance_RVA;
-                if (_resolveAttemptCount == 0)
-                    XMLogging.WriteLine($"[CameraManager] get_Instance at 0x{methodAddr:X} (GameAssembly+0x{Offsets.EFTCameraManager.GetInstance_RVA:X})");
 
                 // Read method bytes
                 byte[] methodBytes = Memory.ReadBuffer(methodAddr, 128, false);
@@ -796,20 +885,14 @@ namespace eft_dma_radar.Tarkov.GameWorld
                             ReadOnlySpan<uint> fallbackOffsets = [knownOffset - 0x10, knownOffset - 0x08, knownOffset + 0x08, knownOffset + 0x10, knownOffset + 0x18];
 
                             if (TryReadStaticInstance(classPtr, knownOffset, out var instance))
-                            {
-                                XMLogging.WriteLine($"[CameraManager] OK Found Instance via pattern 1 (StaticFields=0x{knownOffset:X}): 0x{instance:X}");
                                 return instance;
-                            }
 
                             foreach (var offset in fallbackOffsets)
                             {
                                 if (offset == knownOffset)
                                     continue;
                                 if (TryReadStaticInstance(classPtr, offset, out instance))
-                                {
-                                    XMLogging.WriteLine($"[CameraManager] OK Found Instance via pattern 1 (fallback offset=0x{offset:X}): 0x{instance:X}");
                                     return instance;
-                                }
                             }
                         }
                     }
@@ -828,11 +911,7 @@ namespace eft_dma_radar.Tarkov.GameWorld
                         {
                             ulong testCamera = Memory.ReadPtr(instancePtr + Offsets.EFTCameraManager.Camera, false);
                             if (testCamera.IsValidVirtualAddress())
-                            {
-                                XMLogging.WriteLine($"[CameraManager] OK Found Instance via pattern 2 at +0x{i:X}");
-                                XMLogging.WriteLine($"[CameraManager]   Instance: 0x{instancePtr:X}");
                                 return instancePtr;
-                            }
                         }
                     }
                 }

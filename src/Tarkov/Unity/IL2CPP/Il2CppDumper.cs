@@ -1,14 +1,12 @@
-using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Text;
 using eft_dma_radar.Common.DMA.ScatterAPI;
 using eft_dma_radar.Common.Misc;
 using SDK;
 
 namespace eft_dma_radar.Tarkov.Unity.IL2CPP
 {
-    public static class Il2CppDumper
+    public static partial class Il2CppDumper
     {
         // ── IL2CPP struct field offsets ──────────────────────────────────────────
         private const uint K_Name        = 0x10;   // char*    Il2CppClass::name
@@ -61,815 +59,7 @@ namespace eft_dma_radar.Tarkov.Unity.IL2CPP
             [FieldOffset(0x18)] public ulong NamePtr;       // char* name
         }
 
-        // ── Schema ───────────────────────────────────────────────────────────────
-
-        private enum FieldKind { Normal, MethodRva }
-
-        private readonly struct SchemaField
-        {
-            public readonly string    Il2CppName; // name as it appears in IL2CPP metadata
-            public readonly string    CsName;     // name to emit in the output struct
-            public readonly FieldKind Kind;
-            public SchemaField(string il2cpp, string cs, FieldKind kind = FieldKind.Normal)
-            { Il2CppName = il2cpp; CsName = cs; Kind = kind; }
-        }
-
-        private sealed class SchemaClass
-        {
-            public readonly string        Il2CppName; // plain class name used for name-based lookup
-            public readonly string        CsName;     // struct name in generated output
-            public readonly bool          IsStatic;   // emit as static class (singleton statics)
-            public readonly SchemaField[] Fields;
-            /// <summary>
-            /// When non-null, resolves the class directly via
-            ///   tablePtr + TypeIndex * 8
-            /// without name-string matching. Required for obfuscated EFT classes.
-            /// Obtain from Offsets.Special or by scanning the type table offline.
-            /// MDToken → TypeIndex: (mdToken &amp; 0x00FFFFFF) - 1
-            /// </summary>
-            public readonly uint? TypeIndex;
-
-            public SchemaClass(string il2cpp, string cs, bool isStatic, SchemaField[] fields, uint? typeIndex)
-            { Il2CppName = il2cpp; CsName = cs; IsStatic = isStatic; Fields = fields; TypeIndex = typeIndex; }
-        }
-
-        // Shorthand helpers
-        private static SchemaField F(string il2cpp, string cs = null)
-            => new(il2cpp, cs ?? il2cpp, FieldKind.Normal);
-        private static SchemaField M(string il2cpp, string cs = null)
-            => new(il2cpp, cs ?? (il2cpp + "_RVA"), FieldKind.MethodRva);
-
-        /// <param name="il2cpp">Plain IL2CPP class name (only used for name-based fallback).</param>
-        /// <param name="f">Fields / methods to dump.</param>
-        /// <param name="cs">Output struct name (defaults to il2cpp).</param>
-        /// <param name="s">Emit as static class.</param>
-        /// <param name="ti">
-        /// TypeIndex for direct O(1) lookup.
-        /// Set this for any class whose name is obfuscated in EFT (\uXXXX).
-        /// Obtain via: (MDToken &amp; 0x00FFFFFF) - 1, or from Offsets.Special.
-        /// Leave 0 to use name-based lookup (only reliable for non-obfuscated classes).
-        /// </param>
-        private static SchemaClass C(string il2cpp, SchemaField[] f, string cs = null, bool s = false, uint ti = 0)
-            => new(il2cpp, cs ?? il2cpp, s, f, ti == 0 ? null : ti);
-
-        private static SchemaClass[] BuildSchema() =>
-        [
-            // TarkovApplication
-            C("TarkovApplication", [F("_menuOperation")]),
-
-            // MainMenuShowOperation
-            C("MainMenuShowOperation", [F("_afkMonitor"), F("_preloaderUI"), F("_profile")]),
-
-            // PreloaderUI
-            C("PreloaderUI", [F("_sessionIdText"), F("_alphaVersionLabel")]),
-
-            // AFKMonitor → AfkMonitor
-            C("AFKMonitor", [F("_afkTimeout", "Delay")], cs: "AfkMonitor"),
-
-            // GameWorld (base fields)
-            C("GameWorld", [
-                F("GameDateTime"),
-                F("<SynchronizableObjectLogicProcessor>k__BackingField", "SynchronizableObjectLogicProcessor"),
-            ]),
-
-            // GameWorld → ClientLocalGameWorld (extended fields from same IL2CPP class)
-            C("GameWorld", [
-                F("<BtrController>k__BackingField", "BtrController"),
-                F("<TransitController>k__BackingField", "TransitController"),
-                F("<ExfiltrationController>k__BackingField", "ExfilController"),
-                F("<ClientShellingController>k__BackingField", "ClientShellingController"),
-                F("<LocationId>k__BackingField", "LocationId"),
-                F("LootList"),
-                F("RegisteredPlayers"),
-                F("BorderZones"),
-                F("MainPlayer"),
-                F("_world", "World"),
-                F("<SynchronizableObjectLogicProcessor>k__BackingField", "SynchronizableObjectLogicProcessor"),
-                F("Grenades"),
-            ], cs: "ClientLocalGameWorld"),
-
-            // TransitController
-            C("TransitController", [F("pointsById", "TransitPoints")]),
-
-            // ArtilleryShellingControllerClient → ClientShellingController
-            C("ArtilleryShellingControllerClient", [F("ActiveClientProjectiles")], cs: "ClientShellingController"),
-
-            // World_2 → WorldController
-            C("World_2", [F("_interactables", "Interactables")], cs: "WorldController"),
-
-            // WorldInteractiveObject → Interactable
-            C("WorldInteractiveObject", [F("KeyId"), F("Id"), F("_doorState")], cs: "Interactable"),
-
-            // ArtilleryProjectileClient
-            C("ArtilleryProjectileClient", [F("_targetPosition", "Position"), F("_flyOn", "IsActive")]),
-
-            // TransitPoint
-            C("TransitPoint", [F("parameters")]),
-
-            // TransitParameters
-            C("TransitParameters", [F("id"), F("active"), F("name"), F("description"), F("target"), F("location")]),
-
-            // SynchronizableObject
-            C("SynchronizableObject", [F("Type")]),
-
-            // SynchronizableObjectLogicProcessor
-            C("SynchronizableObjectLogicProcessor", [F("_activeSynchronizableObjects")]),
-
-            // TripwireSynchronizableObject
-            C("TripwireSynchronizableObject", [
-                F("<GrenadeTemplateId>k__BackingField", "GrenadeTemplateId"),
-                F("_tripwireState"),
-                F("<FromPosition>k__BackingField", "FromPosition"),
-                F("<ToPosition>k__BackingField", "ToPosition"),
-            ]),
-
-            // BtrController
-            C("BtrController", [F("<BtrView>k__BackingField", "BtrView")]),
-
-            // BTRView
-            C("BTRView", [F("turret"), F("_previousPosition")]),
-
-            // BTRTurretView
-            C("BTRTurretView", [F("_bot", "AttachedBot")]),
-
-            // EffectsController
-            C("EffectsController", [
-                F("_effectsPrefab"),
-                F("FastVineteFlicker"),
-                F("<RainScreenDrops>k__BackingField", "RainScreenDrops"),
-                F("<ScreenWater>k__BackingField", "ScreenWater"),
-                F("_vignette"),
-                F("_doubleVision"),
-                F("_hueFocus"),
-                F("_radialBlur"),
-                F("_sharpen"),
-                F("_lowhHealthBlend"),
-                F("_bloodlossBlend"),
-                F("_wiggle"),
-                F("_motionBluer"),
-                F("_bloodOnScreen"),
-                F("_grenadeFlash"),
-                F("_eyeBurn"),
-                F("_blur"),
-                F("_dof"),
-                F("_effectAccumulators"),
-                F("_sharpenAccumulator"),
-                F("_radialBlurAccumulator"),
-                F("_chromaticAberration"),
-                F("_thermalVision"),
-                F("_frostbiteEffect"),
-            ]),
-
-            // FrostbiteEffect
-            C("FrostbiteEffect", [F("_opacity")]),
-
-            // NightVision
-            C("NightVision", [F("_on")]),
-
-            // ThermalVision
-            C("ThermalVision", [
-                F("_material", "Material"), F("On"), F("IsNoisy"), F("IsFpsStuck"), F("IsMotionBlurred"),
-                F("IsGlitch"), F("IsPixelated"), F("ChromaticAberrationThermalShift"),
-                F("UnsharpRadiusBlur"), F("UnsharpBias"),
-            ]),
-
-            // HealthInfo → HealthController
-            C("HealthInfo", [F("Energy"), F("Hydration")], cs: "HealthController"),
-
-            // ExfiltrationController → ExfilController
-            C("ExfiltrationController", [
-                F("<ExfiltrationPoints>k__BackingField", "ExfiltrationPointArray"),
-                F("<ScavExfiltrationPoints>k__BackingField", "ScavExfiltrationPointArray"),
-                F("<SecretExfiltrationPoints>k__BackingField", "SecretExfiltrationPointArray"),
-            ], cs: "ExfilController"),
-
-            // ExfiltrationPoint → Exfil
-            C("ExfiltrationPoint", [F("_status"), F("Settings"), F("EligibleEntryPoints")], cs: "Exfil"),
-
-            // ScavExfiltrationPoint → ScavExfil
-            C("ScavExfiltrationPoint", [F("EligibleIds")], cs: "ScavExfil"),
-
-            // ExitTriggerSettings → ExfilSettings
-            C("ExitTriggerSettings", [F("Name")], cs: "ExfilSettings"),
-
-            // Grenade (fields from Grenade class)
-            C("Grenade", [F("<WeaponSource>k__BackingField", "WeaponSource")], cs: "Grenade"),
-
-            // Throwable (fields from Throwable class → same output struct Grenade)
-            C("Throwable", [F("_isDestroyed", "IsDestroyed")], cs: "Grenade"),
-
-            // Player
-            C("Player", [
-                F("_characterController"),
-                F("<MovementContext>k__BackingField", "MovementContext"),
-                F("_playerBody"),
-                F("<ProceduralWeaponAnimation>k__BackingField", "ProceduralWeaponAnimation"),
-                F("_animators"),
-                F("EnabledAnimators"),
-                F("Corpse"),
-                F("<Location>k__BackingField", "Location"),
-                F("<InteractableObject>k__BackingField", "InteractableObject"),
-                F("<Profile>k__BackingField", "Profile"),
-                F("Physical"),
-                F("<AIData>k__BackingField", "AIData"),
-                F("_healthController"),
-                F("_inventoryController"),
-                F("_handsController"),
-                F("<InteractionRayOriginOnStartOperation>k__BackingField", "InteractionRayOriginOnStartOperation"),
-                F("<InteractionRayDirectionOnStartOperation>k__BackingField", "InteractionRayDirectionOnStartOperation"),
-                F("<IsYourPlayer>k__BackingField", "IsYourPlayer"),
-                F("<VoipID>k__BackingField", "VoipID"),
-                F("<PlayerId>k__BackingField", "Id"),
-                F("<GameWorld>k__BackingField", "GameWorld"),
-            ]),
-
-            // ObservedPlayerView
-            C("ObservedPlayerView", [
-                F("<ObservedPlayerController>k__BackingField", "ObservedPlayerController"),
-                F("<Voice>k__BackingField", "Voice"),
-                F("<VisibleToCameraType>k__BackingField", "VisibleToCameraType"),
-                F("<GroupId>k__BackingField", "GroupID"),
-                F("<Side>k__BackingField", "Side"),
-                F("<IsAI>k__BackingField", "IsAI"),
-                F("<NickName>k__BackingField", "NickName"),
-                F("<AccountId>k__BackingField", "AccountId"),
-                F("<PlayerBody>k__BackingField", "PlayerBody"),
-                F("<Id>k__BackingField", "Id"),
-                F("<VoipID>k__BackingField", "VoipId"),
-            ]),
-
-            // ObservedPlayerController
-            C("ObservedPlayerController", [
-                F("<InventoryController>k__BackingField", "InventoryController"),
-                F("<PlayerView>k__BackingField", "Player"),
-                F("<InfoContainer>k__BackingField", "InfoContainer"),
-                F("<MovementController>k__BackingField", "MovementController"),
-                F("<HealthController>k__BackingField", "HealthController"),
-                F("<HandsController>k__BackingField", "HandsController"),
-            ]),
-
-            // ObservedPlayerStateContext → ObservedMovementController
-            C("ObservedPlayerStateContext", [
-                F("<Rotation>k__BackingField", "Rotation"),
-                F("_velocity", "Velocity"),
-            ], cs: "ObservedMovementController"),
-
-            // ObservedPlayerHandsController → ObservedHandsController
-            C("ObservedPlayerHandsController", [
-                F("_item", "ItemInHands"),
-                F("_bundleAnimationBones", "BundleAnimationBones"),
-            ], cs: "ObservedHandsController"),
-
-            // BundleAnimationBones → BundleAnimationBonesController
-            C("BundleAnimationBones", [
-                F("<ProceduralWeaponAnimation>k__BackingField", "ProceduralWeaponAnimationObs"),
-            ], cs: "BundleAnimationBonesController"),
-
-            // ProceduralWeaponAnimation → ProceduralWeaponAnimationObs (observed _isAiming)
-            C("ProceduralWeaponAnimation", [
-                F("_isAiming", "_isAimingObs"),
-            ], cs: "ProceduralWeaponAnimationObs"),
-
-            // ObservedPlayerHealthController → ObservedHealthController
-            C("ObservedPlayerHealthController", [
-                F("_player", "Player"),
-                F("_playerCorpse", "PlayerCorpse"),
-                F("HealthStatus"),
-            ], cs: "ObservedHealthController"),
-
-            // ProceduralWeaponAnimation (main)
-            C("ProceduralWeaponAnimation", [
-                F("<ShotNeedsFovAdjustments>k__BackingField", "ShotNeedsFovAdjustments"),
-                F("Breath"),
-                F("PositionZeroSum"),
-                F("Shootingg"),
-                F("_aimingSpeed"),
-                F("_isAiming"),
-                F("_optics"),
-                F("_shotDirection"),
-                F("Mask"),
-                F("HandsContainer"),
-                F("_fovCompensatoryDistance"),
-            ]),
-
-            // PlayerSpring → HandsContainer
-            C("PlayerSpring", [
-                F("CameraOffset"),
-                F("HandsRotation"),
-                F("CameraRotation"),
-                F("CameraPosition"),
-            ], cs: "HandsContainer"),
-
-            // SightNBone
-            C("SightNBone", [F("Mod")]),
-
-            // ShotEffector
-            C("ShotEffector", [F("NewShotRecoil")]),
-
-            // PlayerStateContainer
-            C("PlayerStateContainer", [F("Name"), F("StateFullNameHash")]),
-
-            // NewRecoilShotEffect → NewShotRecoil
-            C("NewRecoilShotEffect", [F("IntensitySeparateFactors")], cs: "NewShotRecoil"),
-
-            // VisorEffect
-            C("VisorEffect", [F("Intensity")]),
-
-            // TOD_Time
-            C("TOD_Time", [F("LockCurrentTime")]),
-
-            // TOD_CycleParameters
-            C("TOD_CycleParameters", [F("Hour")]),
-
-            // TOD_ImageEffect → TOD_Scattering
-            C("TOD_ImageEffect", [F("_sky", "Sky")], cs: "TOD_Scattering"),
-
-            // TOD_Sky
-            C("TOD_Sky", [
-                F("<Cycle>k__BackingField", "Cycle"),
-                F("<Components>k__BackingField", "TOD_Components"),
-            ]),
-
-            // TOD_Components
-            C("TOD_Components", [F("<Time>k__BackingField", "TOD_Time")]),
-
-            // Profile
-            C("Profile", [
-                F("Id"), F("AccountId"), F("Info"), F("Inventory"), F("Skills"),
-                F("TaskConditionCounters"), F("QuestsData"), F("WishlistManager"), F("Stats"),
-            ]),
-
-            // WishlistManager
-            C("WishlistManager", [F("_userItems", "Items")]),
-
-            // ProfileInfo → PlayerInfo
-            C("ProfileInfo", [
-                F("Nickname"), F("EntryPoint"), F("<Side>k__BackingField", "Side"), F("RegistrationDate"),
-                F("GroupId"), F("<Settings>k__BackingField", "Settings"), F("MemberCategory"), F("_experience", "Experience"),
-            ], cs: "PlayerInfo"),
-
-            // SkillManager
-            C("SkillManager", [
-                F("StrengthBuffJumpHeightInc"), F("StrengthBuffThrowDistanceInc"),
-                F("MagDrillsLoadSpeed"), F("MagDrillsUnloadSpeed"),
-                F("RaidLoadedAmmoAction"), F("RaidUnloadedAmmoAction"),
-            ]),
-
-            // FloatBuff → SkillValueContainer
-            C("FloatBuff", [F("Value")], cs: "SkillValueContainer"),
-
-            // QuestStatusData → QuestData
-            C("QuestStatusData", [F("Id"), F("Status"), F("CompletedConditions"), F("Template")], cs: "QuestData"),
-
-            // CompletedConditionsCollection
-            C("CompletedConditionsCollection", [
-                F("_backendData", "BackendData"),
-                F("_localChanges", "LocalChanges"),
-            ]),
-
-            // QuestTemplate
-            C("QuestTemplate", [
-                F("<Conditions>k__BackingField", "Conditions"),
-                F("_questName", "Name"),
-            ]),
-
-            // ItemHandsController
-            C("ItemHandsController", [F("_item", "Item")]),
-
-            // FirearmController
-            C("FirearmController", [F("Fireport"), F("COI", "TotalCenterOfImpact"), F("WeaponLn")]),
-
-            // ClientFirearmController (fields from ClientFirearmController + inherited FirearmController)
-            C("FirearmController", [F("WeaponLn")], cs: "ClientFirearmController"),
-            C("ClientFirearmController", [F("LastShotId", "ShotIndex")], cs: "ClientFirearmController"),
-
-            // MovementContext
-            C("MovementContext", [
-                F("_player", "Player"),
-                F("_rotation"),
-                F("PlantState"),
-                F("<CurrentState>k__BackingField", "CurrentState"),
-                F("_states"),
-                F("_movementStates"),
-                F("_tilt"),
-                F("_physicalCondition"),
-                F("_speedLimitIsDirty"),
-                F("<StateSpeedLimit>k__BackingField", "StateSpeedLimit"),
-                F("<StateSprintSpeedLimit>k__BackingField", "StateSprintSpeedLimit"),
-                F("_lookDirection"),
-                F("<WalkInertia>k__BackingField", "WalkInertia"),
-                F("<SprintBrakeInertia>k__BackingField", "SprintBrakeInertia"),
-                F("_poseInertia"),
-                F("_currentPoseInertia"),
-                F("_inertiaAppliedTime"),
-            ]),
-
-            // MovementState (from MovementState class)
-            C("MovementState", [F("StickToGround"), F("PlantTime")], cs: "MovementState"),
-
-            // BaseMovementState (from BaseMovementState class → same output)
-            C("BaseMovementState", [F("Name"), F("AnimatorStateHash"), F("AuthoritySpeed")], cs: "MovementState"),
-
-            // MovePlayerState (from MovePlayerState class → same output)
-            C("MovePlayerState", [F("_velocity"), F("_velocity2")], cs: "MovementState"),
-
-            // InventoryController
-            C("InventoryController", [F("<Inventory>k__BackingField", "Inventory")]),
-
-            // Inventory
-            C("Inventory", [F("Equipment"), F("QuestRaidItems"), F("QuestStashItems"), F("Stash")]),
-
-            // Stash
-            C("Stash", [F("_grid", "Grids")]),
-
-            // CompoundItem → Stash (Slots from CompoundItem, same output Stash)
-            C("CompoundItem", [F("Slots")], cs: "Stash"),
-
-            // CompoundItem → Equipment
-            C("CompoundItem", [F("Grids"), F("Slots")], cs: "Equipment"),
-
-            // BarterOther → BarterOtherOffsets
-            C("BarterOther", [F("Dogtag")], cs: "BarterOtherOffsets"),
-
-            // DogtagComponent
-            C("DogtagComponent", [
-                F("GroupId"), F("AccountId"), F("ProfileId"), F("Nickname"),
-                F("Side"), F("Level"), F("Time"), F("Status"), F("KillerAccountId"),
-                F("KillerProfileId"), F("KillerName"), F("WeaponName"), F("CarriedByGroupMember"),
-            ]),
-
-            // Grid → Grids
-            C("Grid", [F("<ItemCollection>k__BackingField", "ContainedItems")], cs: "Grids"),
-
-            // GridItemCollection → GridContainedItems
-            C("GridItemCollection", [F("ItemsList", "Items")], cs: "GridContainedItems"),
-
-            // Slot
-            C("Slot", [
-                F("<ContainedItem>k__BackingField", "ContainedItem"),
-                F("<ID>k__BackingField", "ID"),
-                F("Required"),
-            ]),
-
-            // LootItem → InteractiveLootItem
-            C("LootItem", [F("_item", "Item")], cs: "InteractiveLootItem"),
-
-            // Skeleton → DizSkinningSkeleton
-            C("Skeleton", [F("_values")], cs: "DizSkinningSkeleton"),
-
-            // LootableContainer (fields from LootableContainer class)
-            C("LootableContainer", [F("ItemOwner"), F("Template")], cs: "LootableContainer"),
-
-            // WorldInteractiveObject (fields inherited → same output LootableContainer)
-            C("WorldInteractiveObject", [
-                F("<InteractingPlayer>k__BackingField", "InteractingPlayer"),
-            ], cs: "LootableContainer"),
-
-            // ItemController → LootableContainerItemOwner
-            C("ItemController", [F("<RootItem>k__BackingField", "RootItem")], cs: "LootableContainerItemOwner"),
-
-            // Item → LootItem
-            C("Item", [
-                F("StackObjectsCount"), F("Version"), F("Components"), F("<Template>k__BackingField", "Template"), F("<SpawnedInSession>k__BackingField", "SpawnedInSession"),
-            ], cs: "LootItem"),
-
-            // CompoundItem → LootItemMod
-            C("CompoundItem", [F("Grids"), F("Slots")], cs: "LootItemMod"),
-
-            // Grid → Grid
-            C("Grid", [F("<ItemCollection>k__BackingField", "ItemCollection")], cs: "Grid"),
-
-            // GridItemCollection → GridItemCollection
-            C("GridItemCollection", [F("ItemsList")], cs: "GridItemCollection"),
-
-            // Weapon → LootItemWeapon
-            C("Weapon", [
-                F("FireMode"),
-                F("<Chambers>k__BackingField", "Chambers"),
-                F("_magSlotCache"),
-            ], cs: "LootItemWeapon"),
-
-            // LevelSettings
-            C("LevelSettings", [F("AmbientMode"), F("EquatorColor"), F("GroundColor")]),
-
-            // SlotView_2 → PlayerBodySubclass
-            C("SlotView_2", [F("Dresses")], cs: "PlayerBodySubclass"),
-
-            // Dress
-            C("Dress", [F("Renderers")]),
-
-            // EFTHardSettings (singleton with TypeIndex)
-            C("EFTHardSettings", [
-                F("POSE_CHANGING_SPEED"),
-                F("_instance"),
-                F("MED_EFFECT_USING_PANEL"),
-                F("MOUSE_LOOK_HORIZONTAL_LIMIT"),
-                F("MOUSE_LOOK_LIMIT_IN_AIMING_COEF"),
-                F("MOUSE_LOOK_VERTICAL_LIMIT"),
-                F("ABOVE_OR_BELOW"),
-                F("ABOVE_OR_BELOW_STAIRS"),
-                F("AIM_PROCEDURAL_INTENSITY"),
-                F("AIR_CONTROL_BACK_DIR"),
-                F("AIR_CONTROL_NONE_OR_ORT_DIR"),
-                F("AIR_CONTROL_SAME_DIR"),
-                F("AIR_LERP"),
-                F("AIR_MIN_SPEED"),
-                F("DecelerationSpeed"),
-                F("WEAPON_OCCLUSION_LAYERS"),
-                F("DOOR_RAYCAST_DISTANCE"),
-                F("LOOT_RAYCAST_DISTANCE"),
-            ], s: true, ti: Offsets.Special.EFTHardSettings_TypeIndex),
-
-            // GPUInstancerManager (singleton with TypeIndex)
-            C("GPUInstancerManager", [
-                F("runtimeDataList"),
-            ], s: true, ti: Offsets.Special.GPUInstancerManager_TypeIndex),
-
-            // ClientBackendSession
-            C("ClientBackendSession", [F("<BackEndConfig>k__BackingField", "BackEndConfig")]),
-
-            // FireModeComponent
-            C("FireModeComponent", [F("FireMode")]),
-
-            // MagazineTemplate → LootItemMagazine
-            C("MagazineTemplate", [F("Cartridges"), F("LoadUnloadModifier")], cs: "LootItemMagazine"),
-
-            // Item → MagazineClass
-            C("Item", [F("StackObjectsCount")], cs: "MagazineClass"),
-
-            // StackSlot
-            C("StackSlot", [F("_items"), F("MaxCount")]),
-
-            // ItemTemplate
-            C("ItemTemplate", [F("Name"), F("ShortName"), F("<_id>k__BackingField", "_id"), F("Weight"), F("QuestItem")]),
-
-            // ModTemplate
-            C("ModTemplate", [F("Velocity")]),
-
-            // AmmoTemplate
-            C("AmmoTemplate", [
-                F("InitialSpeed"), F("BallisticCoeficient"), F("BulletMassGram"), F("BulletDiameterMilimeters"),
-            ]),
-
-            // WeaponTemplate
-            C("WeaponTemplate", [
-                F("Velocity"), F("AllowJam"), F("AllowFeed"), F("AllowMisfire"), F("AllowSlide"),
-            ]),
-
-            // PlayerBody
-            C("PlayerBody", [
-                F("SkeletonRootJoint"), F("BodySkins"), F("_bodyRenderers"), F("SlotViews"), F("PointOfView"),
-            ]),
-
-            // InventoryBlur
-            C("InventoryBlur", [F("_blurCount"), F("_upsampleTexDimension")]),
-
-            // Physical
-            C("PhysicalBase", [
-                F("Overweight"), F("WalkOverweight"), F("WalkSpeedLimit"), F("Inertia"),
-                F("Stamina"), F("Oxygen"), F("BaseOverweightLimits"), F("SprintOverweightLimits"),
-                F("PreviousWeight"), F("SprintAcceleration"), F("PreSprintAcceleration"),
-                F("_encumbered"), F("_overEncumbered"), F("SprintOverweight"), F("<BerserkRestorationFactor>k__BackingField", "BerserkRestorationFactor"),
-            ], cs: "Physical"),
-
-            // Stamina → PhysicalValue
-            C("Stamina", [F("Current")], cs: "PhysicalValue"),
-
-            // BreathEffector
-            C("BreathEffector", [F("Intensity")]),
-
-            // OpticCameraManager
-            C("OpticCameraManager", [F("<Camera>k__BackingField", "Camera"), F("<CurrentOpticSight>k__BackingField", "CurrentOpticSight")]),
-
-            // GPUInstancerRuntimeData
-            C("GPUInstancerRuntimeData", [F("instanceBounds")]),
-
-            // CameraManager → EFTCameraManager
-            C("CameraManager", [
-                F("<OpticCameraManager>k__BackingField", "OpticCameraManager"),
-                F("<Camera>k__BackingField", "Camera"),
-                M("get_Instance_RVA", "GetInstance_RVA"),
-            ], cs: "EFTCameraManager"),
-
-            // SightComponent
-            C("SightComponent", [
-                F("_template"), F("ScopesSelectedModes"), F("SelectedScope"), F("ScopeZoomValue"),
-            ]),
-
-            // SightModTemplate → SightInterface
-            C("SightModTemplate", [F("Zooms")], cs: "SightInterface"),
-
-            // WeatherController (instance fields + static Instance, with TypeIndex)
-            C("WeatherController", [F("Instance"), F("WeatherDebug")], s: true, ti: Offsets.Special.WeatherController_TypeIndex),
-
-            // WeatherDebug
-            C("WeatherDebug", [
-                F("CloudDensity"), F("Fog"), F("LightningThunderProbability"),
-                F("Rain"), F("WindMagnitude"), F("isEnabled"),
-            ]),
-        ];
-
-        // ── IL2CPP bootstrap resolution ─────────────────────────────────────────
-
-        /// <summary>
-        /// Candidate signatures for locating the TypeInfoTable global store.
-        /// Each entry: (signature, rel32 offset from match start, instruction length for RIP calc, description).
-        /// All patterns target a <c>mov [rip+xxxx], rax</c> or <c>lea reg, [rip+xxxx]</c>
-        /// instruction that references the <c>s_Il2CppMetadataRegistration→typeInfoTable</c> global.
-        /// </summary>
-        private static readonly (string Sig, int RelOffset, int InstrLen, string Desc)[] TypeInfoTableSigs =
-        [
-            // Pattern 1 (strict): mov [rip+xxxx], rax; mov rax, [rip+yyyy]; mov edx/ecx, [rax+0x30]
-            ("48 89 05 ? ? ? ? 48 8B 05 ? ? ? ? 8B 50", 3, 7, "mov [rip+rel32],rax; mov rax,[rip+rel32]; mov edx,[rax+30]"),
-
-            // Pattern 2 (relaxed tail): mov [rip+xxxx], rax; mov rax, [rip+yyyy]
-            ("48 89 05 ? ? ? ? 48 8B 05 ? ? ? ?", 3, 7, "mov [rip+rel32],rax; mov rax,[rip+rel32]"),
-
-            // Pattern 3: mov [rip+xxxx], rax; followed by xor ecx,ecx (common in newer IL2CPP builds)
-            ("48 89 05 ? ? ? ? 33 C9", 3, 7, "mov [rip+rel32],rax; xor ecx,ecx"),
-
-            // Pattern 4: mov [rip+xxxx], rax; followed by any mov reg,imm or test
-            ("48 89 05 ? ? ? ? 48 85", 3, 7, "mov [rip+rel32],rax; test reg,reg"),
-        ];
-
-        /// <summary>
-        /// Signature-scans GameAssembly.dll for the TypeInfoTable global and
-        /// updates <see cref="Offsets.Special.TypeInfoTableRva"/> at runtime.
-        /// Tries multiple signature patterns and validates the result by probing
-        /// the resolved table for plausible class pointers.
-        /// Falls back to the hardcoded value in SDK.cs if all strategies fail.
-        /// </summary>
-        private static bool ResolveTypeInfoTableRva(ulong gaBase)
-        {
-            XMLogging.WriteLine("[Il2CppDumper] Scanning for TypeInfoTable...");
-
-            // Strategy 1–N: try each signature pattern in order.
-            foreach (var (sig, relOff, instrLen, desc) in TypeInfoTableSigs)
-            {
-                var sigAddr = Memory.FindSignature(sig, "GameAssembly.dll");
-                if (sigAddr == 0)
-                    continue;
-
-                var rva = ResolveRipRelativeRva(sigAddr, relOff, instrLen, gaBase);
-                if (rva == 0)
-                    continue;
-
-                if (ValidateTypeInfoTable(gaBase, rva))
-                {
-                    var previous = Offsets.Special.TypeInfoTableRva;
-                    Offsets.Special.TypeInfoTableRva = rva;
-
-                    XMLogging.WriteLine($"[Il2CppDumper] TypeInfoTable resolved via: {desc}");
-                    XMLogging.WriteLine($"        RVA = 0x{rva:X}");
-
-                    if (previous != rva)
-                        XMLogging.WriteLine($"[Il2CppDumper] TypeInfoTableRva updated: 0x{previous:X} → 0x{rva:X}");
-
-                    return true;
-                }
-
-                XMLogging.WriteLine($"[Il2CppDumper] Sig matched ({desc}) but validation failed at RVA 0x{rva:X} — trying next pattern.");
-            }
-
-            // All signatures failed — validate the hardcoded fallback.
-            XMLogging.WriteLine("[Il2CppDumper] All sig scans failed. Validating hardcoded fallback...");
-
-            if (Offsets.Special.TypeInfoTableRva != 0 && ValidateTypeInfoTable(gaBase, Offsets.Special.TypeInfoTableRva))
-            {
-                XMLogging.WriteLine($"[Il2CppDumper] Hardcoded TypeInfoTableRva 0x{Offsets.Special.TypeInfoTableRva:X} passed validation.");
-                return true;
-            }
-
-            XMLogging.WriteLine("[Il2CppDumper] WARNING: All TypeInfoTable resolution strategies failed — offsets may be stale!");
-            return false;
-        }
-
-        /// <summary>
-        /// Reads a RIP-relative <c>int32</c> displacement from a matched signature
-        /// and computes the target RVA relative to <paramref name="gaBase"/>.
-        /// </summary>
-        private static ulong ResolveRipRelativeRva(ulong sigAddr, int relOffset, int instrLen, ulong gaBase)
-        {
-            int rel;
-            try { rel = Memory.ReadValue<int>(sigAddr + (ulong)relOffset, false); }
-            catch { return 0; }
-
-            ulong globalVa = sigAddr + (ulong)instrLen + (ulong)(long)rel;
-
-            // Basic sanity: the resolved VA must be inside GameAssembly's address space.
-            if (globalVa <= gaBase)
-                return 0;
-
-            return globalVa - gaBase;
-        }
-
-        /// <summary>
-        /// Validates a candidate TypeInfoTable RVA by probing the first few entries.
-        /// A valid table has non-null class pointers whose <c>Il2CppClass::name</c>
-        /// fields point to readable ASCII strings.
-        /// </summary>
-        private static bool ValidateTypeInfoTable(ulong gaBase, ulong rva)
-        {
-            ulong tablePtr;
-            try { tablePtr = Memory.ReadPtr(gaBase + rva, false); }
-            catch { return false; }
-
-            if (!tablePtr.IsValidVirtualAddress())
-                return false;
-
-            // Probe a handful of early entries — at least some must look like valid Il2CppClass*.
-            const int probeCount = 8;
-            const int requiredValid = 3;
-            int valid = 0;
-
-            ulong[] ptrs;
-            try { ptrs = Memory.ReadArray<ulong>(tablePtr, probeCount, false); }
-            catch { return false; }
-
-            for (int i = 0; i < ptrs.Length; i++)
-            {
-                if (!ptrs[i].IsValidVirtualAddress())
-                    continue;
-
-                // Read Il2CppClass::name pointer (offset 0x10) and check it's a readable string.
-                ulong namePtr;
-                try { namePtr = Memory.ReadValue<ulong>(ptrs[i] + K_Name, false); }
-                catch { continue; }
-
-                if (!namePtr.IsValidVirtualAddress())
-                    continue;
-
-                var name = ReadStr(namePtr);
-                if (!string.IsNullOrEmpty(name) && name.Length < MaxNameLen && IsPlausibleClassName(name))
-                    valid++;
-
-                if (valid >= requiredValid)
-                    return true;
-            }
-
-            return false;
-        }
-
-        /// <summary>
-        /// Checks whether a string looks like a plausible IL2CPP class name
-        /// (printable ASCII or common Unicode escape, no control chars).
-        /// </summary>
-        private static bool IsPlausibleClassName(string name)
-        {
-            for (int i = 0; i < name.Length; i++)
-            {
-                char c = name[i];
-                // Allow printable ASCII, common C# identifier chars, and IL2CPP unicode escapes
-                if (c < 0x20 || (c > 0x7E && c < 0xA0))
-                    return false;
-            }
-            return true;
-        }
-
-        /// <summary>
-        /// Maps IL2CPP class names → <see cref="Offsets.Special"/> TypeIndex field names.
-        /// Add entries here when new singleton classes need TypeIndex resolution.
-        /// </summary>
-        private static readonly (string Il2CppName, string FieldName)[] TypeIndexMap =
-        [
-            ("EFTHardSettings",     nameof(Offsets.Special.EFTHardSettings_TypeIndex)),
-            ("GPUInstancerManager", nameof(Offsets.Special.GPUInstancerManager_TypeIndex)),
-            ("WeatherController",   nameof(Offsets.Special.WeatherController_TypeIndex)),
-            ("GlobalConfiguration", nameof(Offsets.Special.GlobalConfiguration_TypeIndex)),
-        ];
-
-        /// <summary>
-        /// Looks up known singleton class names in the scanned type table and
-        /// updates <see cref="Offsets.Special"/> TypeIndex fields dynamically.
-        /// Falls back to hardcoded values for any class not found.
-        /// </summary>
-        private static void ResolveTypeIndices(Dictionary<string, int> nameToIndex)
-        {
-            var specialType = typeof(Offsets.Special);
-            const BindingFlags bf = BindingFlags.Public | BindingFlags.Static;
-
-            foreach (var (il2cppName, fieldName) in TypeIndexMap)
-            {
-                var fi = specialType.GetField(fieldName, bf);
-                if (fi is null)
-                    continue;
-
-                if (nameToIndex.TryGetValue(il2cppName, out var index))
-                {
-                    var previous = (uint)fi.GetValue(null);
-                    fi.SetValue(null, (uint)index);
-
-                    if (previous != (uint)index)
-                        XMLogging.WriteLine($"[Il2CppDumper] {fieldName} updated: {previous} → {index}");
-                    else
-                        XMLogging.WriteLine($"[Il2CppDumper] {fieldName} matches hardcoded value ({index}).");
-                }
-                else
-                {
-                    XMLogging.WriteLine($"[Il2CppDumper] WARN: '{il2cppName}' not found in type table — {fieldName} using fallback ({fi.GetValue(null)}).");
-                }
-            }
-        }
+        // ── Entry point ──────────────────────────────────────────────────────────
 
         /// <summary>
         /// Resolves IL2CPP offsets at runtime and applies them to
@@ -888,7 +78,11 @@ namespace eft_dma_radar.Tarkov.Unity.IL2CPP
             }
 
             // Dynamically resolve TypeInfoTableRva via sig scan (falls back to hardcoded).
-            ResolveTypeInfoTableRva(gaBase);
+            if (!ResolveTypeInfoTableRva(gaBase))
+            {
+                XMLogging.WriteLine("[Il2CppDumper] ABORT: TypeInfoTable resolution failed — cannot dump offsets.");
+                return;
+            }
 
             // Resolve the type-info table pointer once — used by both paths.
             ulong tablePtr;
@@ -907,7 +101,15 @@ namespace eft_dma_radar.Tarkov.Unity.IL2CPP
 
             // Scan the full type table — needed for name lookups AND TypeIndex resolution.
             var classes = ReadAllClassesFromTable(tablePtr);
-            XMLogging.WriteLine($"[Il2CppDumper] Type table: {classes.Count} classes found.");
+
+            // Sanity gate: a healthy IL2CPP binary has tens of thousands of classes.
+            // If we found very few, the table pointer is likely stale or corrupt.
+            const int MinExpectedClasses = 1_000;
+            if (classes.Count < MinExpectedClasses)
+            {
+                XMLogging.WriteLine($"[Il2CppDumper] ABORT: Only {classes.Count} classes found (expected ≥{MinExpectedClasses}) — TypeInfoTable likely corrupt or stale.");
+                return;
+            }
 
             var nameLookup  = new Dictionary<string, ulong>(classes.Count * 2, StringComparer.Ordinal);
             var nameToIndex = new Dictionary<string, int>(classes.Count * 2, StringComparer.Ordinal);
@@ -1000,10 +202,6 @@ namespace eft_dma_radar.Tarkov.Unity.IL2CPP
                     ? ReadClassMethods(klassPtr, gaBase)
                     : null;
 
-                // ── Verbose dump log (comment out to silence) ────────────────
-                //LogClassDump(sc, resolvedVia, fieldMap, methodMap);
-                // ─────────────────────────────────────────────────────────────
-
                 foreach (var sf in sc.Fields)
                 {
                     if (sf.Kind == FieldKind.MethodRva)
@@ -1048,8 +246,11 @@ namespace eft_dma_radar.Tarkov.Unity.IL2CPP
                 }
             }
 
-            XMLogging.WriteLine($"[Il2CppDumper] Done. {updated} offsets updated from dump, {fallback} using hardcoded fallback, {classesSkipped} classes skipped.");
+            DebugDumpResolverState(classes.Count, updated, fallback, classesSkipped);
+            XMLogging.WriteLine($"[Il2CppDumper] Done. {updated} offsets updated, {fallback} fallback, {classesSkipped} skipped.");
         }
+
+        // ── Reflection helpers ───────────────────────────────────────────────────
 
         /// <summary>
         /// Attempts to set a static field on a type via reflection.
@@ -1109,7 +310,7 @@ namespace eft_dma_radar.Tarkov.Unity.IL2CPP
             }
         }
 
-        // ── Verbose dump logging (comment out the call site to silence) ──────
+        // ── Verbose dump logging ─────────────────────────────────────────────────
 
         /// <summary>
         /// Logs every resolved field and method for a single class.
@@ -1174,8 +375,6 @@ namespace eft_dma_radar.Tarkov.Unity.IL2CPP
             if (validIndices.Count == 0)
                 return result;
 
-            XMLogging.WriteLine($"[Il2CppDumper] Scatter-reading name/namespace pointers for {validIndices.Count} classes...");
-
             // Step 2: Scatter read name_ptr + namespace_ptr for every valid class (one 16-byte read each).
             var ptrEntries = new ScatterReadEntry<ClassNamePtrs>[validIndices.Count];
             var scatterBatch = new IScatterEntry[validIndices.Count];
@@ -1213,7 +412,6 @@ namespace eft_dma_radar.Tarkov.Unity.IL2CPP
                 }
             }
 
-            XMLogging.WriteLine($"[Il2CppDumper] Scatter-reading {stringBatch.Count} name/namespace strings...");
             Memory.ReadScatter(stringBatch.ToArray(), false);
 
             // Step 4: Build results.
@@ -1344,6 +542,8 @@ namespace eft_dma_radar.Tarkov.Unity.IL2CPP
             return result;
         }
 
+        // ── String / pointer helpers ─────────────────────────────────────────────
+
         /// <summary>
         /// Converts between the two IL2CPP backing field naming conventions:
         ///   "&lt;Name&gt;k__BackingField"  ↔  "_Name_k__BackingField"
@@ -1374,7 +574,6 @@ namespace eft_dma_radar.Tarkov.Unity.IL2CPP
             return null;
         }
 
-        // Reads a pointer without throwing (uses ReadValue<ulong> — never ReadPtr which throws)
         private static ulong ReadPtr(ulong addr)
         {
             if (!addr.IsValidVirtualAddress()) return 0;
