@@ -60,15 +60,37 @@ namespace eft_dma_radar.Tarkov.Unity.IL2CPP
             [FieldOffset(0x18)] public ulong NamePtr;       // char* name
         }
 
+        // ── Run-once guard ────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Set to <c>true</c> after the first successful dump (live or from cache).
+        /// Prevents re-running the expensive type-table scan on subsequent game
+        /// restarts within the same process lifetime — the resolved offsets are
+        /// already in memory and the TypeInfoTable may no longer be readable.
+        /// </summary>
+        private static volatile bool _dumped;
+
         // ── Entry point ──────────────────────────────────────────────────────────
 
         /// <summary>
         /// Resolves IL2CPP offsets at runtime and applies them to
         /// <see cref="Offsets"/> via reflection. Hardcoded defaults in SDK.cs
         /// serve as fallback for any field that cannot be resolved.
+        /// 
+        /// Runs only once per process lifetime: after a successful dump the
+        /// results are persisted to <c>il2cpp_offsets.json</c> next to the
+        /// executable.  On subsequent calls (e.g. game restarts) the cache is
+        /// loaded instead of re-reading the TypeInfoTable, which may no longer
+        /// be accessible after the first ~10 minutes in-game.
         /// </summary>
         public static void Dump()
         {
+            if (_dumped)
+            {
+                XMLogging.WriteLine("[Il2CppDumper] Already dumped this session — skipping.");
+                return;
+            }
+
             XMLogging.WriteLine("[Il2CppDumper] Dump starting...");
 
             var gaBase = Memory.GameAssemblyBase;
@@ -79,11 +101,25 @@ namespace eft_dma_radar.Tarkov.Unity.IL2CPP
             }
 
             // Dynamically resolve TypeInfoTableRva via sig scan (falls back to hardcoded).
+            // We must do this even for the cache path so we have the RVA fingerprint
+            // needed to validate whether the cache matches the current game build.
             if (!ResolveTypeInfoTableRva(gaBase))
             {
                 XMLogging.WriteLine("[Il2CppDumper] ABORT: TypeInfoTable resolution failed — cannot dump offsets.");
                 return;
             }
+
+            // ── Fast path: load from cache ───────────────────────────────────────
+            // If the cache was written against the same TypeInfoTableRva (i.e. the
+            // same game binary), skip the expensive live memory read entirely.
+            if (TryLoadCache(Offsets.Special.TypeInfoTableRva))
+            {
+                _dumped = true;
+                XMLogging.WriteLine("[Il2CppDumper] Offsets restored from cache — live dump skipped.");
+                return;
+            }
+
+            // ── Live path: read TypeInfoTable from memory ────────────────────────
 
             // Resolve the type-info table pointer once — used by both paths.
             ulong tablePtr;
@@ -265,6 +301,11 @@ namespace eft_dma_radar.Tarkov.Unity.IL2CPP
 
             DebugDumpResolverState(classes.Count, updated, fallback, classesSkipped);
             XMLogging.WriteLine($"[Il2CppDumper] Done. {updated} offsets updated, {fallback} fallback, {classesSkipped} skipped.");
+
+            // Persist to cache so future game restarts (where the TypeInfoTable may
+            // no longer be readable) can skip the live dump entirely.
+            _dumped = true;
+            SaveCache();
         }
 
         // ── Reflection helpers ───────────────────────────────────────────────────
