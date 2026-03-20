@@ -13,7 +13,6 @@ using eft_dma_radar.Tarkov.Features;
 using eft_dma_radar.Tarkov.GameWorld;
 using System.IO;
 using eft_dma_radar.Tarkov.EFTPlayer.Plugins;
-using eft_dma_radar.Tarkov.API;
 using eft_dma_radar.UI.ESP.eft_dma_radar.UI.ESP;
 using HandyControl.Controls;
 using System.Drawing.Imaging.Effects;
@@ -291,8 +290,7 @@ namespace eft_dma_radar.Tarkov.Loot
 
                     GetCorpseLoot(interactiveClass, corpseLoot, isPMC);
 
-                    // 🔥 LOG DOGTAG ONCE HERE
-                    CorpseDogtagLogger.TryLog(player, corpseLoot);
+                    CorpseKillfeedLogger.TryLog(player, corpseLoot);
 
                     var corpse = new LootCorpse(corpseLoot)
                     {
@@ -446,36 +444,16 @@ namespace eft_dma_radar.Tarkov.Loot
         }
 
         #endregion
-        #region DogTags
-        /// <summary>
-        /// Gets all dogtags on a corpse.
-        /// </summary>
-        internal static class CorpseDogtagLogger
+        #region Killfeed
+        internal static class CorpseKillfeedLogger
         {
-            // =========================
-            // CONFIG
-            // =========================
-            public static bool EnableDebug = false;
-
-            // =========================
-            // STATE
-            // =========================
             private static readonly HashSet<string> _loggedProfileIds = new();
             private static readonly object _sync = new();
 
-            // =========================
-            // PUBLIC ENTRY
-            // =========================
             public static void TryLog(Player player, List<LootItem> corpseLoot)
             {
-                Debug($"[Dogtag] Checking corpse: Name='{player?.Name}' PMC={player?.IsPmc} LootCount={corpseLoot?.Count ?? 0}");
-
-                    
                 if (corpseLoot == null || corpseLoot.Count == 0)
-                {
-                    Debug("[Dogtag] SKIP: corpseLoot empty");
                     return;
-                }
 
                 foreach (var item in corpseLoot)
                 {
@@ -490,9 +468,6 @@ namespace eft_dma_radar.Tarkov.Loot
                     if (!itemBase.IsValidVirtualAddress())
                         continue;
 
-                    // -------------------------------------------------
-                    // DogtagComponent
-                    // -------------------------------------------------
                     ulong dogtagComp;
                     try
                     {
@@ -506,94 +481,61 @@ namespace eft_dma_radar.Tarkov.Loot
                     if (!dogtagComp.IsValidVirtualAddress())
                         continue;
 
-                    // -------------------------------------------------
-                    // VICTIM
-                    // -------------------------------------------------
-                    string victimName = ReadStringPtr(dogtagComp + Offsets.DogtagComponent.Nickname, "VictimName");
-                    string victimProfileId = ReadStringPtr(dogtagComp + Offsets.DogtagComponent.ProfileId, "VictimProfileId");
-                    string victimAccountId = ReadStringPtr(dogtagComp + Offsets.DogtagComponent.AccountId, "VictimAccountId");
+                    string victimName = ReadStringPtr(dogtagComp + Offsets.DogtagComponent.Nickname);
+                    string victimProfileId = ReadStringPtr(dogtagComp + Offsets.DogtagComponent.ProfileId);
 
-                    if (string.IsNullOrEmpty(victimProfileId) ||
-                        string.IsNullOrEmpty(victimAccountId) ||
-                        string.IsNullOrEmpty(victimName))
+                    if (string.IsNullOrEmpty(victimProfileId) || string.IsNullOrEmpty(victimName))
                         continue;
 
                     lock (_sync)
                     {
                         if (!_loggedProfileIds.Add(victimProfileId))
-                        {
-                            Debug($"[Dogtag] DUPLICATE Victim ProfileId '{victimProfileId}'");
                             continue;
-                        }
                     }
 
-                    //XMLogging.WriteLine($"[Dogtag] ✔ VICTIM {victimName} ({victimProfileId})");
-
-                    DogtagApiClient.Send(
-                        victimAccountId,
-                        victimProfileId,
-                        victimName);
-
-                    // -------------------------------------------------
-                    // KILLER (AS SEPARATE PLAYER)
-                    // -------------------------------------------------
-                    string killerProfileId = ReadStringPtr(dogtagComp + Offsets.DogtagComponent.KillerProfileId, "KillerProfileId");
-                    string killerAccountId = ReadStringPtr(dogtagComp + Offsets.DogtagComponent.KillerAccountId, "KillerAccountId");
-                    string killerName = ReadStringPtr(dogtagComp + Offsets.DogtagComponent.KillerName, "KillerName");
-                    string killerWeapon = ReadStringPtr(dogtagComp + Offsets.DogtagComponent.WeaponName, "KillerWeapon");
+                    string killerProfileId = ReadStringPtr(dogtagComp + Offsets.DogtagComponent.KillerProfileId);
+                    string killerAccountId = ReadStringPtr(dogtagComp + Offsets.DogtagComponent.KillerAccountId);
+                    string killerName = ReadStringPtr(dogtagComp + Offsets.DogtagComponent.KillerName);
 
                     if (!string.IsNullOrEmpty(killerProfileId) &&
                         !string.IsNullOrEmpty(killerAccountId) &&
                         !string.IsNullOrEmpty(killerName))
                     {
-                        //XMLogging.WriteLine($"[Dogtag] ✔ KILLER {killerName} ({killerProfileId})");
                         PlayerListWorker.UpdateIdentity(
                             profileId: killerProfileId,
                             nickname: killerName,
                             accountId: killerAccountId);
-                        DogtagApiClient.Send(
-                            killerAccountId,
-                            killerProfileId,
-                            killerName);
-                        // -------------------------------------------------
-                        // RESOLVE KILLER WEAPON FROM LIVE PLAYER LIST
-                        // -------------------------------------------------
+
                         string weapon = "UNKNOWN";
                         PlayerType side = PlayerType.Default;
-                        string level = ""; 
+                        string level = "";
                         string ammo = "";
 
-                        if (!string.IsNullOrEmpty(killerProfileId))
+                        try
                         {
-                            try
-                            {
-                                var killerPlayer = Memory.Players?
-                                    .FirstOrDefault(p =>
-                                        p is ObservedPlayer op &&
-                                        op.ProfileID == killerProfileId);
+                            var killerPlayer = Memory.Players?
+                                .FirstOrDefault(p =>
+                                    p is ObservedPlayer op &&
+                                    op.ProfileID == killerProfileId);
 
-                                if (killerPlayer?.Hands?.CurrentItem is string w &&
-                                    !string.IsNullOrWhiteSpace(w))
+                            if (killerPlayer?.Hands?.CurrentItem is string w &&
+                                !string.IsNullOrWhiteSpace(w))
+                            {
+                                weapon = w;
+                                ammo = killerPlayer.Hands?.CurrentAmmo;
+                                side = killerPlayer!.Type;
+                                if (killerPlayer is ObservedPlayer op)
                                 {
-                                    weapon = w;
-                                    ammo = killerPlayer.Hands?.CurrentAmmo;
-                                    side = killerPlayer!.Type;
-                                    if (killerPlayer is ObservedPlayer op)
-                                    {
-                                        if (op.Profile?.Level is int lvl)
-                                            level = lvl.ToString();
-                                    }
+                                    if (op.Profile?.Level is int lvl)
+                                        level = lvl.ToString();
                                 }
                             }
-                            catch
-                            {
-                                // ignore — fallback to UNKNOWN
-                            }
+                        }
+                        catch
+                        {
+                            // fallback to UNKNOWN
                         }
 
-                        // -------------------------------------------------
-                        // PUSH KILLFEED EVENT
-                        // -------------------------------------------------
                         KillfeedManager.Push(
                             killerName,
                             victimName,
@@ -601,15 +543,12 @@ namespace eft_dma_radar.Tarkov.Loot
                             side,
                             ammo,
                             level
-                        );                      
-                    }                 
+                        );
+                    }
                 }
             }
 
-            // =========================
-            // HELPERS
-            // =========================
-            private static string ReadStringPtr(ulong addr, string label)
+            private static string ReadStringPtr(ulong addr)
             {
                 try
                 {
@@ -625,21 +564,11 @@ namespace eft_dma_radar.Tarkov.Loot
                 }
             }
 
-            private static void Debug(string msg)
-            {
-                if (EnableDebug)
-                    XMLogging.WriteLine(msg);
-            }
-
-            // =========================
-            // RESET
-            // =========================
             public static void Reset()
             {
                 lock (_sync)
                 {
                     _loggedProfileIds.Clear();
-                    XMLogging.WriteLine("[Dogtag] Reset logged profile IDs");
                 }
             }
         }

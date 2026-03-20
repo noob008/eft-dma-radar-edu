@@ -604,7 +604,6 @@ namespace eft_dma_radar.UI.Pages
             ccbWidgets.SelectionChanged += widgetsCheckComboBox_SelectionChanged;
             ccbGeneralOptions.SelectionChanged += generalOptionsCheckComboBox_SelectionChanged;
 
-            btnSendStashDogTags.Click += btnSendStashDogTags_Click;
             nudFPSLimit.ValueChanged += GeneralNUD_ValueChanged;
             sldrUIScale.ValueChanged += GeneralSlider_ValueChanged;
 
@@ -1149,47 +1148,6 @@ namespace eft_dma_radar.UI.Pages
 
                     listQuests.UpdateLayout();
                 });
-            }
-        }
-        private async void btnSendStashDogTags_Click(object sender, RoutedEventArgs e)
-        {
-            var result = MessageBox.Show(
-                "? IMPORTANT ?\n\n" +
-                "Make sure you are NOT in raid and are currently in the MAIN MENU.\n\n" +
-                "Click Continue when ready, or Cancel to abort.",
-                "Menu Stash Dogtag Dump",
-                MessageBoxButton.OKCancel,
-                MessageBoxImage.Warning
-            );
-        
-            if (result != MessageBoxResult.OK)
-                return;
-        
-            btnSendStashDogTags.IsEnabled = false;
-            btnSendStashDogTags.Content = "Sending...";
-        
-            try
-            {
-                await Task.Run(() =>
-                {
-                    MenuStashDogtagDumper.Dump();
-                });
-        
-                NotificationsShared.Success(
-                    "Menu stash dogtags successfully sent to API.\n\n" +
-                    "You may now enter a raid safely."
-                );
-            }
-            catch (Exception ex)
-            {
-                NotificationsShared.Error(
-                    $"Failed to send dogtags:\n{ex.Message}"
-                );
-            }
-            finally
-            {
-                btnSendStashDogTags.IsEnabled = true;
-                btnSendStashDogTags.Content = "Send Stashed DogTags";
             }
         }
         private void InitializeWebRadar()
