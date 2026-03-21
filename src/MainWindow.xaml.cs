@@ -11,6 +11,7 @@ using eft_dma_radar.Tarkov.GameWorld.Exits;
 using eft_dma_radar.Tarkov.GameWorld.Explosives;
 using eft_dma_radar.Tarkov.GameWorld.Interactables;
 using eft_dma_radar.Tarkov.Loot;
+using eft_dma_radar.Tarkov.Unity.IL2CPP;
 using eft_dma_radar.UI;
 using eft_dma_radar.UI.ESP;
 using eft_dma_radar.UI.Misc;
@@ -973,13 +974,15 @@ namespace eft_dma_radar
 
         private void WaitingForRaidStatus(SKCanvas canvas)
         {
-            const string waitingFor1 = "Waiting for Raid Start.";
-            const string waitingFor2 = "Waiting for Raid Start..";
-            const string waitingFor3 = "Waiting for Raid Start...";
-            string status = _statusOrder == 1 ?
-                waitingFor1 : _statusOrder == 2 ?
-                waitingFor2 : waitingFor3;
-            float textWidth = SKPaints.RadarFontRegular48.MeasureText(waitingFor1);
+            string dots = _statusOrder == 1 ? "." : _statusOrder == 2 ? ".." : "...";
+            string stageText = "Waiting for Raid Start";
+
+            var stage = MatchingProgressResolver.GetCachedStage();
+            if (stage != Enums.EMatchingStage.None)
+                stageText = stage.ToDisplayString();
+
+            string status = stageText + dots;
+            float textWidth = SKPaints.RadarFontRegular48.MeasureText(stageText + "...");
             canvas.DrawText(status, ((float)skCanvas.ActualWidth / 2) - textWidth / 2f, (float)skCanvas.ActualHeight / 2,
                 SKTextAlign.Left, SKPaints.RadarFontRegular48, SKPaints.TextRadarStatus);
             IncrementStatus();

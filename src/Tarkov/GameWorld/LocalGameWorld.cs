@@ -62,6 +62,7 @@ namespace eft_dma_radar.Tarkov.GameWorld
 
         public static bool IsOffline { get; private set; }
         public static ulong LevelSettings { get; private set; }
+        public static ulong MatchingProgress { get; private set; }
 
         private bool _disposed;
         private bool _raidStarted;
@@ -106,7 +107,9 @@ namespace eft_dma_radar.Tarkov.GameWorld
         private static void Memory_GameStopped(object sender, EventArgs e)
         {
             LevelSettings = 0;
+            MatchingProgress = 0;
             LevelSettingsResolver.Reset();
+            MatchingProgressResolver.Reset();
             Il2CppClass.ForceReset();      // <?? REQUIRED
         }
 
@@ -290,10 +293,23 @@ namespace eft_dma_radar.Tarkov.GameWorld
                 ResourceJanitor.Run();
                 Memory.ThrowIfNotInGame();
 
+                // Resolve MatchingProgressView once, then update the live stage on every tick.
+                if (!MatchingProgressResolver.TryGetCached(out _))
+                    MatchingProgressResolver.ResolveAsync();
+
+                MatchingProgressResolver.TryUpdateStage();
+
                 try
                 {
                     // Phase 1: Find GameWorld (minimal init)
                     var instance = GetLocalGameWorld(ct);
+
+                    // Assign MatchingProgress from cache (may already be resolved)
+                    if (MatchingProgressResolver.TryGetCached(out var mp) && mp.IsValidVirtualAddress())
+                    {
+                        MatchingProgress = mp;
+                        XMLogging.WriteLine($"[IL2CPP] MatchingProgress assigned @ 0x{mp:X}");
+                    }
 
                     // Phase 2: Wait for raid to be ready, then initialize game data
                     instance.WaitForRaidReady(ct);
@@ -405,7 +421,7 @@ namespace eft_dma_radar.Tarkov.GameWorld
                     XMLogging.WriteLine($"[IL2CPP] LevelSettings resolution error: {ex.Message}");
                     LevelSettings = 0;
                 }
-        
+
                 return new LocalGameWorld(localGameWorld, map);
             }
             catch (OperationCanceledException)
@@ -508,7 +524,9 @@ namespace eft_dma_radar.Tarkov.GameWorld
                     if (!IsRaidActive())
                     {
                         LevelSettings = 0;
+                        MatchingProgress = 0;
                         LevelSettingsResolver.Reset();
+                        MatchingProgressResolver.Reset();
                         Il2CppClass.ForceReset();
                         GuardManager.ClearCache();
                         LootFilterControl.RemoveNonStaticGroups();

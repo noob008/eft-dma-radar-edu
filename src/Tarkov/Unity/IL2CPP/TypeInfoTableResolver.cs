@@ -179,10 +179,12 @@ namespace eft_dma_radar.Tarkov.Unity.IL2CPP
         /// </summary>
         private static readonly (string Il2CppName, string FieldName)[] TypeIndexMap =
         [
-            ("EFTHardSettings",     nameof(Offsets.Special.EFTHardSettings_TypeIndex)),
-            ("GPUInstancerManager", nameof(Offsets.Special.GPUInstancerManager_TypeIndex)),
-            ("WeatherController",   nameof(Offsets.Special.WeatherController_TypeIndex)),
-            ("GlobalConfiguration", nameof(Offsets.Special.GlobalConfiguration_TypeIndex)),
+            ("EFTHardSettings",       nameof(Offsets.Special.EFTHardSettings_TypeIndex)),
+            ("GPUInstancerManager",   nameof(Offsets.Special.GPUInstancerManager_TypeIndex)),
+            ("WeatherController",     nameof(Offsets.Special.WeatherController_TypeIndex)),
+            ("GlobalConfiguration",   nameof(Offsets.Special.GlobalConfiguration_TypeIndex)),
+            ("MatchingProgress",      nameof(Offsets.Special.MatchingProgress_TypeIndex)),
+            ("MatchingProgressView",  nameof(Offsets.Special.MatchingProgressView_TypeIndex)),
         ];
 
         /// <summary>

@@ -91,7 +91,12 @@ namespace eft_dma_radar.Tarkov.WebRadar.Data
                 isFriendly ? WebPlayerType.Teammate :
                 isHuman ?
                     (player.IsScav ? WebPlayerType.PlayerScav : WebPlayerType.Player)
-                    : WebPlayerType.Bot;
+                    : player.Type switch
+                    {
+                        Player.PlayerType.AIBoss => WebPlayerType.Boss,
+                        Player.PlayerType.AIRaider => WebPlayerType.Raider,
+                        _ => WebPlayerType.Bot
+                    };
 
             float kd = 0f;
             float hours = 0f;

@@ -610,6 +610,27 @@ namespace eft_dma_radar.Tarkov.Unity.IL2CPP
                 F("CloudDensity"), F("Fog"), F("LightningThunderProbability"),
                 F("Rain"), F("WindMagnitude"), F("isEnabled"),
             ]),
+
+            // MatchingProgress — pure data model, no static singleton
+            C("MatchingProgress", [
+                F("StatusUpdateEvent"),
+                F("MatchingProgressChangedEvent"),
+                F("<CurrentStage>k__BackingField",                     "CurrentStage"),
+                F("<CurrentStageGroup>k__BackingField",                "CurrentStageGroup"),
+                F("<CurrentStageProgress>k__BackingField",             "CurrentStageProgress"),
+                F("<EstimateTime>k__BackingField",                     "EstimateTime"),
+                F("<StartTime>k__BackingField",                        "StartTime"),
+                F("<IsAbortAvailable>k__BackingField",                 "IsAbortAvailable"),
+                F("<BlockAbortAbilityDurationSeconds>k__BackingField", "BlockAbortAbilityDurationSeconds"),
+                F("<ShowAbortConfirmationPopup>k__BackingField",       "ShowAbortConfirmationPopup"),
+                F("<IsMatchingAbortRequested>k__BackingField",         "IsMatchingAbortRequested"),
+                F("<CanProcessServerStages>k__BackingField",           "CanProcessServerStages"),
+            ]),
+
+            // MatchingProgressView — MonoBehaviour owner, resolved via GOM klass-pointer walk
+            C("MatchingProgressView", [
+                F("_matchingProgress"),
+            ], ti: Offsets.Special.MatchingProgressView_TypeIndex),
         ];
     }
 }

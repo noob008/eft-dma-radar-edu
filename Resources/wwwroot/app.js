@@ -237,6 +237,15 @@ const defaults = {
   aimviewFov: 90,
   aimviewSize: 260,
 
+  aimviewMaxDist: 0,
+  aimviewShowPmc: true,
+  aimviewShowScav: true,
+  aimviewShowPScav: true,
+  aimviewShowBoss: true,
+  aimviewShowRaider: true,
+  aimviewShowTeammate: true,
+  aimviewZoomWithPlayer: true,
+
   lootWidgetSearch: "",
   playersWidgetOnlyPMCs: false,
 
@@ -299,6 +308,7 @@ function mergeState(parsed){
 
   out.aimviewFov  = Math.max(20, Math.min(160, Number(out.aimviewFov)  || 90));
   out.aimviewSize = Math.max(160, Math.min(480, Number(out.aimviewSize) || 260));
+  out.aimviewMaxDist = Math.max(0, Math.min(1000, Number(out.aimviewMaxDist) || 0));
 
   if(!Array.isArray(out.lootGroups)) out.lootGroups = [];
   for(const g of out.lootGroups){
@@ -418,6 +428,16 @@ const inputs = {
   aimviewFov:        $("aimviewFov"),
   aimviewFovText:    $("aimviewFovText"),
   aimviewSize:       $("aimviewSize"),
+
+  aimviewShowPmc:        $("aimviewShowPmc"),
+  aimviewShowScav:       $("aimviewShowScav"),
+  aimviewShowPScav:      $("aimviewShowPScav"),
+  aimviewShowBoss:       $("aimviewShowBoss"),
+  aimviewShowRaider:     $("aimviewShowRaider"),
+  aimviewShowTeammate:   $("aimviewShowTeammate"),
+  aimviewZoomWithPlayer: $("aimviewZoomWithPlayer"),
+  aimviewMaxDist:        $("aimviewMaxDist"),
+  aimviewMaxDistText:    $("aimviewMaxDistText"),
 
   showGroups: $("showGroups"),
   groupAlpha: $("groupAlpha"),
@@ -564,6 +584,20 @@ function bindAllInputs(){
     updateAimviewCanvasSize();
     saveSettings();
   };
+
+  const aimviewFilterKeys = ["aimviewShowPmc","aimviewShowScav","aimviewShowPScav","aimviewShowBoss","aimviewShowRaider","aimviewShowTeammate","aimviewZoomWithPlayer"];
+  for(const k of aimviewFilterKeys){
+    if(inputs[k]){ inputs[k].checked = !!state[k]; onBool(k, inputs[k]); }
+  }
+  if(inputs.aimviewMaxDist){
+    inputs.aimviewMaxDist.value = String(state.aimviewMaxDist);
+    if(inputs.aimviewMaxDistText) inputs.aimviewMaxDistText.textContent = state.aimviewMaxDist > 0 ? state.aimviewMaxDist + "m" : "\u221e";
+    inputs.aimviewMaxDist.oninput = () => {
+      state.aimviewMaxDist = Math.max(0, Math.min(1000, Number(inputs.aimviewMaxDist.value) || 0));
+      if(inputs.aimviewMaxDistText) inputs.aimviewMaxDistText.textContent = state.aimviewMaxDist > 0 ? state.aimviewMaxDist + "m" : "\u221e";
+      saveSettings();
+    };
+  }
 
   onBool("showGroups", inputs.showGroups);
   onNum("groupAlpha", inputs.groupAlpha, (v)=>Math.min(1, Math.max(0, Number(v))));
@@ -1997,12 +2031,26 @@ function buildAimviewMatrix(px, py, pz, yawDeg, pitchDeg){
 
 // Projects a single world point through a synthetic view matrix.
 // Returns null if behind the camera.
-function w2sSynth(wx, wy, wz, vm, halfW, halfH){
+function w2sSynth(wx, wy, wz, vm, halfW, halfH, focalLen){
   const w = vm.fwdX*wx + vm.fwdY*wy + vm.fwdZ*wz + vm.m44;
   if(w < 0.098) return null;
   const x = vm.rgtX*wx + vm.rgtY*wy + vm.rgtZ*wz + vm.m14;
   const y = vm.upX*wx  + vm.upY*wy  + vm.upZ*wz  + vm.m24;
-  return { px: halfW*(1 + x/w), py: halfH*(1 - y/w) };
+  return { px: halfW + focalLen*(x/w), py: halfH - focalLen*(y/w) };
+}
+
+function aimviewPlayerPassesTypeFilter(p){
+  const tn = String(p?.typeName ?? p?.TypeName ?? "").toLowerCase();
+  const isFriendly = !!(p?.isFriendly || p?.IsFriendly);
+  if(isFriendly) return !!state.aimviewShowTeammate;
+  switch(tn){
+    case "player":     return !!state.aimviewShowPmc;
+    case "playerscav": return !!state.aimviewShowPScav;
+    case "bot":        return !!state.aimviewShowScav;
+    case "raider":     return !!state.aimviewShowRaider;
+    case "boss":       return !!state.aimviewShowBoss;
+    default:           return true;
+  }
 }
 
 function drawAimview(players){
@@ -2038,10 +2086,25 @@ function drawAimview(players){
 
   const cx = cpx, cy = cpy, cz = cpz;
 
+  // Compute focal length from configured FOV, then apply player zoom if enabled
+  const fovRad = (state.aimviewFov || 90) * Math.PI / 180;
+  let focalLen = halfW / Math.tan(fovRad / 2);
+  let skelZoom = 1;
+  if(state.aimviewZoomWithPlayer){
+    const zl = Number(centered.zoomLevel ?? centered.ZoomLevel ?? 1);
+    if(zl > 1){
+      if(centeredIsLocal) skelZoom = zl;   // scale pre-projected skel coords around center
+      else focalLen *= zl;                  // zoom synthetic projection via focal length
+    }
+  }
+
+  const maxDist = Number(state.aimviewMaxDist) || 0;
+
   for(const p of players){
     if(!p || p === centered) continue;
     if(p?.isAlive === false || p?.IsAlive === false) continue;
     if(isExtracted(p)) continue;
+    if(!aimviewPlayerPassesTypeFilter(p)) continue;
 
     const tx = Number(p.worldX ?? p.WorldX ?? NaN);
     const ty = Number(p.worldY ?? p.WorldY ?? NaN);
@@ -2049,26 +2112,28 @@ function drawAimview(players){
     if(!Number.isFinite(tx) || !Number.isFinite(ty) || !Number.isFinite(tz)) continue;
 
     const fullDist = Math.sqrt((tx-cx)**2 + (ty-cy)**2 + (tz-cz)**2);
+    if(maxDist > 0 && fullDist > maxDist) continue;
+
     const col = playerColor(p);
 
     if(centeredIsLocal){
       // Local player: use pre-projected SkeletonScreen (exact game camera, no recomputation needed)
       const skel = p?.skeletonScreen ?? p?.SkeletonScreen;
       if(!Array.isArray(skel) || skel.length !== 52) continue;
-      drawAimviewSkel52(skel, W, H, col, fullDist, p);
+      drawAimviewSkel52(skel, W, H, col, fullDist, p, skelZoom);
     } else {
       // Non-local centered: project SkeletonWorld through synthetic view matrix
       const world = p?.skeletonWorld ?? p?.SkeletonWorld;
       if(!Array.isArray(world) || world.length !== 48) continue;
 
       // Project all 16 bones; anchor = MidTorso (index 3)
-      const anchorPt = w2sSynth(world[9], world[10], world[11], synthVm, halfW, halfH);
+      const anchorPt = w2sSynth(world[9], world[10], world[11], synthVm, halfW, halfH, focalLen);
       if(!anchorPt) continue; // MidTorso behind camera — skip
 
       const pts = [];
       for(let i = 0; i < 16; i++){
         const bx = world[i*3], by = world[i*3+1], bz = world[i*3+2];
-        pts.push(w2sSynth(bx, by, bz, synthVm, halfW, halfH) ?? anchorPt);
+        pts.push(w2sSynth(bx, by, bz, synthVm, halfW, halfH, focalLen) ?? anchorPt);
       }
 
       aimviewCtx.strokeStyle = col;
@@ -2104,13 +2169,18 @@ function drawAimview(players){
   drawAimviewCrosshair(halfW, halfH);
 }
 
-function drawAimviewSkel52(skel, W, H, col, fullDist, p){
+function drawAimviewSkel52(skel, W, H, col, fullDist, p, zoom=1){
+  const halfW = W / 2, halfH = H / 2;
+  // sx/sy: apply zoom around canvas center for skeleton screen coords (0-1 normalized)
+  const sx = (v) => halfW + (v * W - halfW) * zoom;
+  const sy = (v) => halfH + (v * H - halfH) * zoom;
+
   aimviewCtx.strokeStyle = col;
   aimviewCtx.lineWidth = 1.5;
   aimviewCtx.beginPath();
   for(let i = 0; i < 52; i += 4){
-    aimviewCtx.moveTo(skel[i]   * W, skel[i+1] * H);
-    aimviewCtx.lineTo(skel[i+2] * W, skel[i+3] * H);
+    aimviewCtx.moveTo(sx(skel[i]),   sy(skel[i+1]));
+    aimviewCtx.lineTo(sx(skel[i+2]), sy(skel[i+3]));
   }
   aimviewCtx.stroke();
 
@@ -2121,12 +2191,12 @@ function drawAimviewSkel52(skel, W, H, col, fullDist, p){
       aimviewCtx.font = "10px monospace";
       aimviewCtx.textAlign = "center";
       aimviewCtx.textBaseline = "bottom";
-      aimviewCtx.fillText(nm, skel[0] * W, skel[1] * H - 3);
+      aimviewCtx.fillText(nm, sx(skel[0]), sy(skel[1]) - 3);
     }
   }
 
-  const fx = (skel[26] + skel[30]) / 2 * W;
-  const fy = Math.max(skel[27], skel[31]) * H;
+  const fx = (sx(skel[26]) + sx(skel[30])) / 2;
+  const fy = Math.max(sy(skel[27]), sy(skel[31]));
   aimviewCtx.fillStyle = "rgba(229,231,235,0.85)";
   aimviewCtx.font = "10px monospace";
   aimviewCtx.textAlign = "center";

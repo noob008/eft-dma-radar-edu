@@ -1,3 +1,4 @@
+using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -688,6 +689,88 @@ namespace eft_dma_radar.Tarkov.Unity.IL2CPP
                 sb[i] = char.IsLetterOrDigit(c) || c == '_' ? c : '_';
             }
             return new string(sb);
+        }
+
+        // ── Full class/field/method diagnostic dump ──────────────────────────────
+
+        /// <summary>
+        /// Writes a human-readable dump of every IL2CPP class in the TypeInfoTable to
+        /// <c>il2cpp_classes_dump.txt</c> next to the executable.
+        /// Each class header shows: TypeIndex | KlassPtr | Namespace.ClassName
+        /// Each field line shows:   field  &lt;name&gt;  offset=0xXX
+        /// Each method line shows:  method &lt;name&gt;  rva=0xXX
+        /// Call this on demand for offset discovery — it is independent of Dump().
+        /// </summary>
+        public static void DumpAllClassesToFile()
+        {
+            XMLogging.WriteLine("[Il2CppDumper] DumpAllClassesToFile starting...");
+
+            var gaBase = Memory.GameAssemblyBase;
+            if (gaBase == 0)
+            {
+                XMLogging.WriteLine("[Il2CppDumper] DumpAllClassesToFile ERROR: GameAssemblyBase is 0.");
+                return;
+            }
+
+            if (!ResolveTypeInfoTableRva(gaBase))
+            {
+                XMLogging.WriteLine("[Il2CppDumper] DumpAllClassesToFile ERROR: TypeInfoTable resolution failed.");
+                return;
+            }
+
+            ulong tablePtr;
+            try { tablePtr = Memory.ReadPtr(gaBase + Offsets.Special.TypeInfoTableRva, false); }
+            catch (Exception ex)
+            {
+                XMLogging.WriteLine($"[Il2CppDumper] DumpAllClassesToFile ReadPtr failed: {ex.Message}");
+                return;
+            }
+
+            if (!tablePtr.IsValidVirtualAddress())
+            {
+                XMLogging.WriteLine("[Il2CppDumper] DumpAllClassesToFile: TypeInfoTable pointer is invalid.");
+                return;
+            }
+
+            var classes = ReadAllClassesFromTable(tablePtr);
+            XMLogging.WriteLine($"[Il2CppDumper] DumpAllClassesToFile: {classes.Count} classes found, reading fields/methods...");
+
+            var outputPath = Path.Combine(AppContext.BaseDirectory, "il2cpp_classes_dump.txt");
+
+            using var sw = new StreamWriter(outputPath, append: false, encoding: System.Text.Encoding.UTF8);
+            sw.WriteLine($"# IL2CPP class dump — {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC");
+            sw.WriteLine($"# GameAssembly base : 0x{gaBase:X}");
+            sw.WriteLine($"# TypeInfoTableRva  : 0x{Offsets.Special.TypeInfoTableRva:X}");
+            sw.WriteLine($"# Total classes     : {classes.Count}");
+            sw.WriteLine();
+
+            int written = 0;
+            foreach (var (name, ns, klassPtr, index) in classes)
+            {
+                var fullName = string.IsNullOrEmpty(ns) ? name : $"{ns}.{name}";
+                var rva      = klassPtr - gaBase;
+                sw.WriteLine($"[{index,6}] rva=0x{rva:X16}  ptr=0x{klassPtr:X16}  {fullName}");
+
+                var fieldMap = ReadClassFields(klassPtr);
+                foreach (var (fieldName, offset) in fieldMap)
+                {
+                    if (offset >= 0)
+                        sw.WriteLine($"         field   {fieldName,-48} offset=0x{(uint)offset:X}");
+                    else
+                        sw.WriteLine($"         field   {fieldName,-48} offset={offset}");
+                }
+
+                var methodMap = ReadClassMethods(klassPtr, gaBase);
+                foreach (var (methodName, methodRva) in methodMap)
+                    sw.WriteLine($"         method  {methodName,-48} rva=0x{methodRva:X}");
+
+                if (fieldMap.Count > 0 || methodMap.Count > 0)
+                    sw.WriteLine();
+
+                written++;
+            }
+
+            XMLogging.WriteLine($"[Il2CppDumper] DumpAllClassesToFile complete — {written} classes written to: {outputPath}");
         }
     }
 }
