@@ -1,8 +1,10 @@
-﻿using System.Collections.Concurrent;
+﻿#nullable enable
+using System.Collections.Concurrent;
 using System.Text.Json.Serialization;
 using eft_dma_radar.Common.Misc;
+using eft_dma_radar.Tarkov.API;
 
-namespace eft_dma_radar.Tarkov.API
+namespace eft_dma_radar.Web.ProfileApi
 {
     /// <summary>
     /// Local-only registry that maps profileId to (accountId, nickname).
@@ -39,7 +41,7 @@ namespace eft_dma_radar.Tarkov.API
         /// </summary>
         public static void SeedFromDogtag(string profileId, string accountId, string? nickname)
         {
-            if (string.IsNullOrEmpty(profileId) || string.IsNullOrEmpty(accountId))
+            if (string.IsNullOrEmpty(profileId) || string.IsNullOrEmpty(accountId) || accountId == "0")
                 return;
 
             // TryAddOrUpdate returns true when accountId is resolved for the first time.

@@ -187,6 +187,31 @@ namespace eft_dma_radar.Tarkov.EFTPlayer.Plugins
             }
         }
 
+        public static bool TryGetIdentity(
+            string profileId,
+            out string? nickname,
+            out string? accountId)
+        {
+            nickname = null;
+            accountId = null;
+
+            if (string.IsNullOrEmpty(profileId))
+                return false;
+
+            lock (_lock)
+            {
+                if (!_players.TryGetValue(profileId, out var entry))
+                    return false;
+
+                if (string.IsNullOrEmpty(entry.Nickname) && string.IsNullOrEmpty(entry.AccountId))
+                    return false;
+
+                nickname = entry.Nickname;
+                accountId = entry.AccountId;
+                return true;
+            }
+        }
+
         public static void UpdateIdentity(
             string profileId,
             string nickname,

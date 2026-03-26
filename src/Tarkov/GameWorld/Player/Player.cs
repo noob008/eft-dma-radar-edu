@@ -1,4 +1,5 @@
 using eft_dma_radar.Tarkov.EFTPlayer.Plugins;
+using eft_dma_radar.Tarkov.EFTPlayer.SpecialCollections;
 using eft_dma_radar.Tarkov.Features;
 using eft_dma_radar.Tarkov.Features.MemoryWrites;
 using eft_dma_radar.Tarkov.Features.MemoryWrites.Patches;
@@ -74,6 +75,15 @@ namespace eft_dma_radar.Tarkov.EFTPlayer
         protected static int _playerScavNumber = 0;
         public virtual int VoipId { get; }
         /// <summary>
+        /// Player History Log.
+        /// </summary>
+        public static PlayerHistory PlayerHistory { get; } = new();
+
+        /// <summary>
+        /// Player Watchlist Entries.
+        /// </summary>
+        public static PlayerWatchlist PlayerWatchlist { get; } = new();
+        /// <summary>
         /// Tracks which player (Base address) owns each VerticesAddr.
         /// Prevents two players sharing the same transform hierarchy.
         /// Key = VerticesAddr, Value = Player.Base that claimed it.
@@ -87,6 +97,7 @@ namespace eft_dma_radar.Tarkov.EFTPlayer
         {
             _groups.Clear();
             _rateLimit.Clear();
+            PlayerHistory.Reset();
             _playerScavNumber = 0;
             _verticesOwner.Clear();
         }
@@ -326,9 +337,24 @@ namespace eft_dma_radar.Tarkov.EFTPlayer
         public bool IsFocused { get; set; }
 
         /// <summary>
+        /// Streaming platform username.
+        /// </summary>
+        public string StreamingUsername { get; set; }
+
+        /// <summary>
+        /// The streaming platform URL they're streaming
+        /// </summary>
+        public string StreamingURL { get; set; }
+
+        /// <summary>
         /// Dead Player's associated loot container object.
         /// </summary>
         public LootContainer LootObject { get; set; }
+
+        /// <summary>
+        /// True if the player is streaming
+        /// </summary>
+        public bool IsStreaming { get; set; }
 
         /// <summary>
         /// Alerts for this Player Object.
@@ -349,6 +375,11 @@ namespace eft_dma_radar.Tarkov.EFTPlayer
         /// Player name.
         /// </summary>
         public virtual string Name { get; set; }
+
+        /// <summary>
+        /// Account UUID for Human Controlled Players.
+        /// </summary>
+        public virtual string AccountID { get; set; }
 
         /// <summary>
         /// Group that the player belongs to.
@@ -548,6 +579,11 @@ namespace eft_dma_radar.Tarkov.EFTPlayer
         public void UpdatePlayerType(PlayerType newType)
         {
             this.Type = newType;
+        }
+
+        public void UpdateStreamingUsername(string url)
+        {
+            this.StreamingUsername = url;
         }
 
         /// <summary>
@@ -1907,6 +1943,8 @@ namespace eft_dma_radar.Tarkov.EFTPlayer
                     return new ValueTuple<SKPaint, SKPaint>(SKPaints.PaintPScav, SKPaints.TextPScav);
                 case PlayerType.SpecialPlayer:
                     return new ValueTuple<SKPaint, SKPaint>(SKPaints.PaintSpecial, SKPaints.TextSpecial);
+                case PlayerType.Streamer:
+                    return new ValueTuple<SKPaint, SKPaint>(SKPaints.PaintStreamer, SKPaints.TextStreamer);
                 default:
                     return new ValueTuple<SKPaint, SKPaint>(SKPaints.PaintUSEC, SKPaints.TextUSEC);
             }
@@ -1939,6 +1977,9 @@ namespace eft_dma_radar.Tarkov.EFTPlayer
 
             if (!string.IsNullOrEmpty(alert))
                 lines.Add((alert, SKPaints.TextMouseover));
+
+            if (IsStreaming)
+                lines.Add(("[LIVE - Double Click]", SKPaints.TextMouseover));
 
             if (IsHostileActive)
             {
@@ -2332,6 +2373,8 @@ namespace eft_dma_radar.Tarkov.EFTPlayer
                     return new ValueTuple<SKPaint, SKPaint>(SKPaints.PaintPlayerScavESP, SKPaints.TextPlayerScavESP);
                 case PlayerType.SpecialPlayer:
                     return new ValueTuple<SKPaint, SKPaint>(SKPaints.PaintSpecialESP, SKPaints.TextSpecialESP);
+                case PlayerType.Streamer:
+                    return new ValueTuple<SKPaint, SKPaint>(SKPaints.PaintStreamerESP, SKPaints.TextStreamerESP);
                 default:
                     return new ValueTuple<SKPaint, SKPaint>(SKPaints.PaintUSECESP, SKPaints.TextUSECESP);
             }
@@ -2369,6 +2412,8 @@ namespace eft_dma_radar.Tarkov.EFTPlayer
                     return SKPaints.PaintMiniPScav;
                 case PlayerType.SpecialPlayer:
                     return SKPaints.PaintMiniSpecial;
+                case PlayerType.Streamer:
+                    return SKPaints.PaintMiniStreamer;
                 default:
                     return SKPaints.PaintMiniUSEC;
             }
@@ -2444,7 +2489,12 @@ namespace eft_dma_radar.Tarkov.EFTPlayer
             /// 'Special' Human Controlled Hostile PMC/Scav (on the watchlist, or a special account type).
             /// </summary>
             [Description("Special Player")]
-            SpecialPlayer
+            SpecialPlayer,
+            /// <summary>
+            /// Human Controlled Hostile PMC/Scav that has a Twitch account name as their IGN.
+            /// </summary>
+            [Description("Streamer")]
+            Streamer
         }
 
         #endregion

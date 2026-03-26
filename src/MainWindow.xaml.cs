@@ -99,6 +99,10 @@ namespace eft_dma_radar
         private const int MIN_QUEST_PLANNER_PANEL_HEIGHT = 300;
         private const int MIN_HIDEOUT_STASH_PANEL_WIDTH = 340;
         private const int MIN_HIDEOUT_STASH_PANEL_HEIGHT = 240;
+        private const int MIN_WATCHLIST_PANEL_WIDTH = 200;
+        private const int MIN_WATCHLIST_PANEL_HEIGHT = 200;
+        private const int MIN_PLAYERHISTORY_PANEL_WIDTH = 350;
+        private const int MIN_PLAYERHISTORY_PANEL_HEIGHT = 130;
 
         private readonly object _renderLock = new object();
         private volatile bool _isRendering = false;
@@ -1684,6 +1688,16 @@ namespace eft_dma_radar
             TogglePanelVisibility("HideoutStash");
         }
 
+        private void btnWatchlist_Click(object sender, RoutedEventArgs e)
+        {
+            TogglePanelVisibility("Watchlist");
+        }
+
+        private void btnPlayerHistory_Click(object sender, RoutedEventArgs e)
+        {
+            TogglePanelVisibility("PlayerHistory");
+        }
+
         private void btnFreeMode_Click(object sender, RoutedEventArgs e)
         {
             _freeMode = !_freeMode;
@@ -1892,6 +1906,8 @@ namespace eft_dma_radar
             coordinator.RegisterRequiredPanel("LootFilter");
             coordinator.RegisterRequiredPanel("LootSettings");
             coordinator.RegisterRequiredPanel("SettingsSearch");
+            coordinator.RegisterRequiredPanel("Watchlist");
+            coordinator.RegisterRequiredPanel("PlayerHistory");
             coordinator.AllPanelsReady += OnAllPanelsReady;
         }
 
@@ -1910,6 +1926,8 @@ namespace eft_dma_radar
                 SettingsSearchControl.BringToFrontRequested += (s, e) => BringPanelToFront(SettingsSearchCanvas);
                 QuestPlannerControl.BringToFrontRequested += (s, e) => BringPanelToFront(QuestPlannerCanvas);
                 HideoutStashControl.BringToFrontRequested += (s, e) => BringPanelToFront(HideoutStashCanvas);
+                WatchlistControl.BringToFrontRequested += (s, e) => BringPanelToFront(WatchlistCanvas);
+                PlayerHistoryControl.BringToFrontRequested += (s, e) => BringPanelToFront(PlayerHistoryCanvas);
 
                 AttachPanelClickHandlers();
                 RestorePanelPositions();
@@ -2153,6 +2171,8 @@ namespace eft_dma_radar
                 "LootFilterPanel" => MIN_LOOT_FILTER_PANEL_WIDTH,
                 "MapSetupPanel" => 300,
                 "QuestPlannerPanel" => MIN_QUEST_PLANNER_PANEL_WIDTH,
+                "WatchlistPanel" => MIN_WATCHLIST_PANEL_WIDTH,
+                "PlayerHistoryPanel" => MIN_PLAYERHISTORY_PANEL_WIDTH,
                 _ => 200
             };
         }
@@ -2168,6 +2188,8 @@ namespace eft_dma_radar
                 "LootFilterPanel" => MIN_LOOT_FILTER_PANEL_HEIGHT,
                 "MapSetupPanel" => 300,
                 "QuestPlannerPanel" => MIN_QUEST_PLANNER_PANEL_HEIGHT,
+                "WatchlistPanel" => MIN_WATCHLIST_PANEL_HEIGHT,
+                "PlayerHistoryPanel" => MIN_PLAYERHISTORY_PANEL_HEIGHT,
                 _ => 200
             };
         }
@@ -2381,6 +2403,14 @@ namespace eft_dma_radar
             HideoutStashControl.DragRequested += sharedDragHandler;
             HideoutStashControl.ResizeRequested += sharedResizeHandler;
             HideoutStashControl.CloseRequested += sharedCloseHandler;
+
+            WatchlistControl.DragRequested += sharedDragHandler;
+            WatchlistControl.ResizeRequested += sharedResizeHandler;
+            WatchlistControl.CloseRequested += sharedCloseHandler;
+
+            PlayerHistoryControl.DragRequested += sharedDragHandler;
+            PlayerHistoryControl.ResizeRequested += sharedResizeHandler;
+            PlayerHistoryControl.CloseRequested += sharedCloseHandler;
         }
 
         private void InitializePanelsCollection()
@@ -2395,7 +2425,9 @@ namespace eft_dma_radar
                 ["MapSetup"] = new PanelInfo(MapSetupPanel, MapSetupCanvas, "MapSetup", 300, 300),
                 ["SettingsSearch"] = new PanelInfo(SettingsSearchPanel, SettingsSearchCanvas, "SettingsSearch", MIN_SEARCH_SETTINGS_PANEL_WIDTH, MIN_SEARCH_SETTINGS_PANEL_HEIGHT),
                 ["QuestPlanner"] = new PanelInfo(QuestPlannerPanel, QuestPlannerCanvas, "QuestPlanner", MIN_QUEST_PLANNER_PANEL_WIDTH, MIN_QUEST_PLANNER_PANEL_HEIGHT),
-                ["HideoutStash"] = new PanelInfo(HideoutStashPanel, HideoutStashCanvas, "HideoutStash", MIN_HIDEOUT_STASH_PANEL_WIDTH, MIN_HIDEOUT_STASH_PANEL_HEIGHT)
+                ["HideoutStash"] = new PanelInfo(HideoutStashPanel, HideoutStashCanvas, "HideoutStash", MIN_HIDEOUT_STASH_PANEL_WIDTH, MIN_HIDEOUT_STASH_PANEL_HEIGHT),
+                ["Watchlist"] = new PanelInfo(WatchlistPanel, WatchlistCanvas, "Watchlist", MIN_WATCHLIST_PANEL_WIDTH, MIN_WATCHLIST_PANEL_HEIGHT),
+                ["PlayerHistory"] = new PanelInfo(PlayerHistoryPanel, PlayerHistoryCanvas, "PlayerHistory", MIN_PLAYERHISTORY_PANEL_WIDTH, MIN_PLAYERHISTORY_PANEL_HEIGHT)
             };
         }
 

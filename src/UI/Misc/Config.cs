@@ -1107,6 +1107,18 @@ namespace eft_dma_radar.UI.Misc
         /// </summary>
         [JsonPropertyName("hideoutStash")]
         public PanelPositionConfig HideoutStash { get; set; } = new PanelPositionConfig();
+
+        /// <summary>
+        /// Watchlist panel position
+        /// </summary>
+        [JsonPropertyName("watchlist")]
+        public PanelPositionConfig Watchlist { get; set; } = new PanelPositionConfig();
+
+        /// <summary>
+        /// Player history panel position
+        /// </summary>
+        [JsonPropertyName("playerHistory")]
+        public PanelPositionConfig PlayerHistory { get; set; } = new PanelPositionConfig();
     }
 
     /// <summary>

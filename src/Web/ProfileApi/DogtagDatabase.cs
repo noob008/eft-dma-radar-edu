@@ -1,10 +1,11 @@
+#nullable enable
 using System.Collections.Concurrent;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using eft_dma_radar.Common.Misc;
 
-namespace eft_dma_radar.Tarkov.API
+namespace eft_dma_radar.Web.ProfileApi
 {
     /// <summary>
     /// Persistent local database that maps profileId to (accountId, nickname).
@@ -15,6 +16,8 @@ namespace eft_dma_radar.Tarkov.API
     {
         private static readonly string _dbPath =
             Path.Combine(AppContext.BaseDirectory, "DogtagDb.json");
+
+        private static readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
 
         private static readonly Lock _writeLock = new();
         private static volatile bool _dirty;
@@ -53,6 +56,10 @@ namespace eft_dma_radar.Tarkov.API
         {
             if (string.IsNullOrEmpty(profileId))
                 return false;
+
+            // Reject placeholder/invalid account IDs (e.g. AI killers have accountId "0")
+            if (accountId == "0")
+                accountId = null;
 
             bool accountIdResolved = false;
 
@@ -140,8 +147,7 @@ namespace eft_dma_radar.Tarkov.API
                 try
                 {
                     var db = new DbFile { Entries = _entries };
-                    var options = new JsonSerializerOptions { WriteIndented = true };
-                    var json = JsonSerializer.Serialize(db, options);
+                    var json = JsonSerializer.Serialize(db, _jsonOptions);
                     var tmp = _dbPath + ".tmp";
                     File.WriteAllText(tmp, json);
                     File.Move(tmp, _dbPath, overwrite: true);

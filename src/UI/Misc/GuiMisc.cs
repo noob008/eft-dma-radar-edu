@@ -7,6 +7,7 @@ using eft_dma_radar.Common.Misc;
 using eft_dma_radar.Common.Misc.Data;
 using eft_dma_radar.Common.Unity;
 using System.Collections.Generic;
+using static eft_dma_radar.Tarkov.EFTPlayer.Player;
 
 namespace eft_dma_radar.UI.Misc
 {
@@ -17,6 +18,210 @@ namespace eft_dma_radar.UI.Misc
     {
         public string Long { get; init; }
         public string Short { get; init; }
+    }
+
+    /// <summary>
+    /// Represents a PMC in the PMC History log.
+    /// Supports both live (in-game) and persisted (loaded from disk) entries.
+    /// </summary>
+    public sealed class PlayerHistoryEntry
+    {
+        private Player _player;
+        private DateTime _lastSeen;
+
+        // Persisted snapshot fields (used when player is not in current session)
+        private string _persistedAccountId;
+        private string _persistedName;
+        private string _persistedType;
+
+        /// <summary>
+        /// The Player Object that this entry is bound to (null for persisted-only entries).
+        /// </summary>
+        public Player Player => _player;
+
+        public string Name => _player?.Name ?? _persistedName ?? "Unknown";
+
+        public string ID => _player?.AccountID ?? _persistedAccountId;
+
+        public string Acct
+        {
+            get
+            {
+                if (_player is ObservedPlayer observed)
+                    return observed.Profile?.Acct;
+                return "--";
+            }
+        }
+
+        public string Type => _player != null
+            ? $"{_player.Type.GetDescription()}"
+            : _persistedType ?? "--";
+
+        public string KD
+        {
+            get
+            {
+                if (_player is ObservedPlayer observed && observed.Profile?.Overall_KD is float kd)
+                    return kd.ToString("n2");
+                return "--";
+            }
+        }
+
+        public string Hours
+        {
+            get
+            {
+                if (_player is ObservedPlayer observed && observed.Profile?.Hours is int hours)
+                    return hours.ToString();
+                return "--";
+            }
+        }
+
+        /// <summary>
+        /// When this player was last seen
+        /// </summary>
+        public DateTime LastSeen
+        {
+            get => _lastSeen;
+            private set => _lastSeen = value;
+        }
+
+        /// <summary>
+        /// Formatted LastSeen for display in UI
+        /// </summary>
+        public string LastSeenFormatted
+        {
+            get
+            {
+                var timeSpan = DateTime.Now - _lastSeen;
+
+                if (timeSpan.TotalMinutes < 1)
+                    return "Just now";
+                else if (timeSpan.TotalMinutes < 60)
+                    return $"{(int)timeSpan.TotalMinutes}m ago";
+                else if (timeSpan.TotalHours < 24)
+                    return $"{(int)timeSpan.TotalHours}h ago";
+                else if (timeSpan.TotalDays < 7)
+                    return $"{(int)timeSpan.TotalDays}d ago";
+                else
+                    return _lastSeen.ToString("MM/dd/yyyy");
+            }
+        }
+
+        /// <summary>
+        /// Constructor for live players (current session).
+        /// </summary>
+        public PlayerHistoryEntry(Player player)
+        {
+            ArgumentNullException.ThrowIfNull(player, nameof(player));
+            _player = player;
+            _persistedAccountId = player.AccountID;
+            _persistedName = player.Name;
+            _persistedType = $"{player.Type.GetDescription()}";
+            _lastSeen = DateTime.Now;
+        }
+
+        /// <summary>
+        /// Constructor for persisted entries loaded from disk.
+        /// </summary>
+        public PlayerHistoryEntry(string accountId, string name, string type, DateTime lastSeen)
+        {
+            _player = null;
+            _persistedAccountId = accountId;
+            _persistedName = name;
+            _persistedType = type;
+            _lastSeen = lastSeen;
+        }
+
+        /// <summary>
+        /// Binds a live player to this persisted entry when they rejoin.
+        /// </summary>
+        public void BindPlayer(Player player)
+        {
+            _player = player;
+            if (!string.IsNullOrEmpty(player.AccountID))
+                _persistedAccountId = player.AccountID;
+            if (!string.IsNullOrEmpty(player.Name))
+                _persistedName = player.Name;
+            _persistedType = $"{player.Type.GetDescription()}";
+        }
+
+        /// <summary>
+        /// Updates the LastSeen timestamp to current time
+        /// </summary>
+        public void UpdateLastSeen()
+        {
+            LastSeen = DateTime.Now;
+            // Update persisted snapshots from live player
+            if (_player != null)
+            {
+                if (!string.IsNullOrEmpty(_player.AccountID))
+                    _persistedAccountId = _player.AccountID;
+                if (!string.IsNullOrEmpty(_player.Name))
+                    _persistedName = _player.Name;
+                _persistedType = $"{_player.Type.GetDescription()}";
+            }
+        }
+
+        /// <summary>
+        /// Updates the LastSeen timestamp to a specific time
+        /// </summary>
+        public void UpdateLastSeen(DateTime timestamp)
+        {
+            LastSeen = timestamp;
+        }
+    }
+
+    /// <summary>
+    /// JSON Wrapper for Player Watchlist.
+    /// </summary>
+    public sealed class PlayerWatchlistEntry
+    {
+        /// <summary>
+        /// Player's Account ID as obtained from Player History.
+        /// </summary>
+        [JsonPropertyName("acctID")]
+        public string AccountID { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Reason for adding player to Watchlist (ex: Cheater, streamer name,etc.)
+        /// </summary>
+        [JsonPropertyName("reason")]
+        public string Reason { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The streaming platform (Twitch, YouTube, etc.)
+        /// </summary>
+        [JsonPropertyName("platform")]
+        public StreamingPlatform StreamingPlatform { get; set; } = StreamingPlatform.None;
+
+        /// <summary>
+        /// The platform username
+        /// </summary>
+        [JsonPropertyName("username")]
+        public string Username { get; set; } = string.Empty;
+    }
+
+    /// <summary>
+    /// Enum representing different streaming platforms
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public enum StreamingPlatform
+    {
+        /// <summary>
+        /// No streaming platform
+        /// </summary>
+        None,
+
+        /// <summary>
+        /// Twitch.tv streaming platform
+        /// </summary>
+        Twitch,
+
+        /// <summary>
+        /// YouTube streaming platform
+        /// </summary>
+        YouTube
     }
 
     public sealed class ScreenEntry

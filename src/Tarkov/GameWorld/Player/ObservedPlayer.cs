@@ -5,10 +5,11 @@ using eft_dma_radar.Common.Misc;
 using eft_dma_radar.Common.Misc.Data;
 using eft_dma_radar.Common.Unity;
 using eft_dma_radar.Common.Unity.Collections;
-using eft_dma_radar.Tarkov.API;
 using eft_dma_radar.Tarkov.EFTPlayer.Plugins;
+using eft_dma_radar.Tarkov.EFTPlayer.SpecialCollections;
 using eft_dma_radar.Tarkov.Features.MemoryWrites.Patches;
 using eft_dma_radar.UI.Misc;
+using eft_dma_radar.Web.ProfileApi;
 using static SDK.Enums;
 using static SDK.Offsets;
 
@@ -32,6 +33,10 @@ namespace eft_dma_radar.Tarkov.EFTPlayer
         /// Player name.
         /// </summary>
         public override string Name { get; set; }
+        /// <summary>
+        /// Account UUID for Human Controlled Players.
+        /// </summary>
+        public override string AccountID { get; set; }
         /// <summary>
         /// Deprecated
         /// </summary>
@@ -186,8 +191,6 @@ namespace eft_dma_radar.Tarkov.EFTPlayer
                 throw new Exception("Invalid Player Side/Faction!");
 
             var isAI = Memory.ReadValue<bool>(this + Offsets.ObservedPlayerView.IsAI);
-            IsHuman = !isAI;
-
             IsHuman = !isAI;
             if (IsScav)
             {
@@ -364,6 +367,8 @@ namespace eft_dma_radar.Tarkov.EFTPlayer
                 this.PWA =  Memory.ReadPtr(dickController + Offsets.BundleAnimationBonesController.ProceduralWeaponAnimationObs);
                 Profile = new PlayerProfile(this);
             }
+
+            PlayerHistory.AddOrUpdate(this);
         }
 
 
@@ -382,6 +387,72 @@ namespace eft_dma_radar.Tarkov.EFTPlayer
             {
                 return -1;
             }
+        }
+
+
+
+        public void CheckIfStreaming()
+        {
+            if (string.IsNullOrEmpty(StreamingURL))
+            {
+                IsStreaming = false;
+
+                if (Type == PlayerType.Streamer)
+                {
+                    UpdatePlayerType(PlayerType.SpecialPlayer);
+
+                    if (PlayerWatchlist.Entries.TryGetValue(AccountID, out var entry))
+                    {
+                        ClearAlerts();
+                        UpdateAlerts(entry.Reason);
+                    }
+                }
+                return;
+            }
+
+            Task.Run(async () =>
+            {
+                try
+                {
+                    if (!PlayerWatchlist.Entries.TryGetValue(AccountID, out var watchlistEntry))
+                        return;
+
+                    var wasStreaming = IsStreaming;
+                    string alertReason = watchlistEntry.Reason;
+
+                    if (watchlistEntry.StreamingPlatform != StreamingPlatform.None &&
+                        !string.IsNullOrEmpty(watchlistEntry.Username))
+                    {
+                        IsStreaming = await StreamingUtils.IsLive(watchlistEntry.StreamingPlatform, watchlistEntry.Username);
+                    }
+                    else
+                    {
+                        IsStreaming = false;
+                    }
+
+                    if (IsStreaming != wasStreaming)
+                    {
+                        if (IsStreaming)
+                        {
+                            UpdatePlayerType(PlayerType.Streamer);
+                            ClearAlerts();
+                            UpdateAlerts(alertReason);
+                        }
+                        else if (Type == PlayerType.Streamer)
+                        {
+                            UpdatePlayerType(PlayerType.SpecialPlayer);
+                            ClearAlerts();
+                            UpdateAlerts(alertReason);
+
+                            XMLogging.WriteLine($"[Streaming] {Name} ({AccountID}) is no longer streaming");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    XMLogging.WriteLine($"[Streaming] Error checking if {Name} [{AccountID}] is live: {ex.Message}");
+                }
+            });
         }
 
         /// <summary>
@@ -422,33 +493,94 @@ namespace eft_dma_radar.Tarkov.EFTPlayer
             if (IsAI)
                 return;
 
-            if (_identityApplied)
-                return;
-
-            try
+            if (!_identityApplied)
             {
-                var nickPtr = Memory.ReadPtr(this + Offsets.ObservedPlayerView.NickName);
-                if (nickPtr != 0)
+                try
                 {
-                    var nickname = Memory.ReadUnityString(nickPtr);
-                    if (!string.IsNullOrWhiteSpace(nickname))
+                    var nickPtr = Memory.ReadPtr(this + Offsets.ObservedPlayerView.NickName);
+                    if (nickPtr != 0)
                     {
-                        Name = nickname;
+                        var nickname = Memory.ReadUnityString(nickPtr);
+                        if (!string.IsNullOrWhiteSpace(nickname))
+                        {
+                            Name = nickname;
+                            _identityApplied = true;
+                            PlayerHistory.AddOrUpdate(this);
+                        }
+                    }
+                }
+                catch { }
+
+                // Try PlayerList.json identity
+                if (!_identityApplied && !string.IsNullOrEmpty(ProfileID))
+                {
+                    if (PlayerListWorker.TryGetIdentity(
+                            ProfileID,
+                            out var plNickname,
+                            out var plAccountId))
+                    {
+                        if (!string.IsNullOrWhiteSpace(plNickname))
+                            Name = plNickname;
+
+                        if (!string.IsNullOrWhiteSpace(plAccountId))
+                            AccountID = plAccountId;
+
                         _identityApplied = true;
-                        return;
+                        PlayerHistory.AddOrUpdate(this);
+
+                        XMLogging.WriteLine(
+                            $"[ObservedPlayer] Identity applied from PlayerList.json: {Name} ({AccountID})");
+                    }
+                    else
+                    {
+                        // Fallback: use the nickname stored in the local dogtag database if the
+                        // in-game name is not yet available. Don't set _identityApplied so the
+                        // real in-game name still takes over as soon as the game provides it.
+                        var cached = PlayerLookupApiClient.TryGetCached(ProfileID);
+                        if (!string.IsNullOrEmpty(cached?.Nickname))
+                        {
+                            Name = cached.Nickname;
+                            PlayerHistory.AddOrUpdate(this);
+                        }
                     }
                 }
             }
-            catch { }
 
-            // Fallback: use the nickname stored in the local dogtag database if the
-            // in-game name is not yet available. Don't set _identityApplied so the
-            // real in-game name still takes over as soon as the game provides it.
-            if (!string.IsNullOrEmpty(ProfileID))
+            // Resolve AccountID from DogtagDatabase once ProfileID is available
+            if (string.IsNullOrEmpty(AccountID) && !string.IsNullOrEmpty(ProfileID))
             {
                 var cached = PlayerLookupApiClient.TryGetCached(ProfileID);
-                if (!string.IsNullOrEmpty(cached?.Nickname))
-                    Name = cached.Nickname;
+                if (!string.IsNullOrEmpty(cached?.AccountId))
+                {
+                    AccountID = cached.AccountId;
+                    PlayerHistory.AddOrUpdate(this);
+                }
+            }
+
+            // Re-check watchlist when AccountID is available (supports mid-raid watchlist additions)
+            if (!string.IsNullOrEmpty(AccountID) && IsHumanHostile)
+            {
+                if (PlayerWatchlist.Entries.TryGetValue(AccountID, out var watchlistEntry))
+                {
+                    if (Type != PlayerType.SpecialPlayer && Type != PlayerType.Streamer)
+                    {
+                        Type = PlayerType.SpecialPlayer;
+                        UpdateAlerts(watchlistEntry.Reason);
+
+                        if (watchlistEntry.StreamingPlatform != StreamingPlatform.None &&
+                            !string.IsNullOrEmpty(watchlistEntry.Username))
+                        {
+                            StreamingURL = StreamingUtils.GetStreamingURL(
+                                watchlistEntry.StreamingPlatform, watchlistEntry.Username);
+                            CheckIfStreaming();
+                        }
+                        else
+                        {
+                            StreamingURL = null;
+                            IsStreaming = false;
+                        }
+                    }
+                }
             }
         }
 

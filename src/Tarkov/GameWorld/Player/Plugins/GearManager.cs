@@ -6,6 +6,7 @@ using eft_dma_radar.Common.Unity.Collections;
 using eft_dma_radar.Common.Misc;
 using eft_dma_radar.Common.Unity;
 using eft_dma_radar.Tarkov.API;
+using eft_dma_radar.Web.ProfileApi;
 
 namespace eft_dma_radar.Tarkov.EFTPlayer.Plugins
 {
