@@ -428,17 +428,28 @@ namespace eft_dma_radar.Tarkov.EFTPlayer
             try
             {
                 var nickPtr = Memory.ReadPtr(this + Offsets.ObservedPlayerView.NickName);
-                if (nickPtr == 0)
-                    return;
-
-                var nickname = Memory.ReadUnityString(nickPtr);
-                if (string.IsNullOrWhiteSpace(nickname))
-                    return;
-
-                Name = nickname;
-                _identityApplied = true;
+                if (nickPtr != 0)
+                {
+                    var nickname = Memory.ReadUnityString(nickPtr);
+                    if (!string.IsNullOrWhiteSpace(nickname))
+                    {
+                        Name = nickname;
+                        _identityApplied = true;
+                        return;
+                    }
+                }
             }
             catch { }
+
+            // Fallback: use the nickname stored in the local dogtag database if the
+            // in-game name is not yet available. Don't set _identityApplied so the
+            // real in-game name still takes over as soon as the game provides it.
+            if (!string.IsNullOrEmpty(ProfileID))
+            {
+                var cached = PlayerLookupApiClient.TryGetCached(ProfileID);
+                if (!string.IsNullOrEmpty(cached?.Nickname))
+                    Name = cached.Nickname;
+            }
         }
 
         private bool _mcSet = false;
