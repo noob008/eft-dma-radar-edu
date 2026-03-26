@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using eft_dma_radar.Common.DMA.ScatterAPI;
 using eft_dma_radar.Common.Misc;
 using eft_dma_radar.Common.Misc.Data;
 using eft_dma_radar.Common.Unity;
@@ -274,19 +275,8 @@ namespace eft_dma_radar.Tarkov.Hideout
                     return false;
                 }
 
-                var stashCtrl = Memory.ReadPtr(behaviour + OffStashCtrl);
-                if (!stashCtrl.IsValidVirtualAddress()) return false;
-
-                var invCtrl = Memory.ReadPtr(stashCtrl + OffInvCtrl);
-                if (!invCtrl.IsValidVirtualAddress()) return false;
-
-                var inventory = Memory.ReadPtr(invCtrl + OffInventory);
-                if (!inventory.IsValidVirtualAddress()) return false;
-
-                var stash = Memory.ReadPtr(inventory + OffStash);
-                if (!stash.IsValidVirtualAddress()) return false;
-
-                var gridsPtr = Memory.ReadPtr(stash + OffGrids);
+                var gridsPtr = Memory.ReadPtrChain(behaviour,
+                    [OffStashCtrl, OffInvCtrl, OffInventory, OffStash, OffGrids]);
                 if (!gridsPtr.IsValidVirtualAddress()) return false;
 
                 Base         = behaviour;
@@ -342,6 +332,7 @@ namespace eft_dma_radar.Tarkov.Hideout
         /// <summary>
         /// Reads the current level, status, and next-upgrade requirements for every
         /// hideout area from memory via HideoutController._areas.
+        /// Uses scatter reads to minimise the number of DMA round-trips.
         /// Results are stored in <see cref="Areas"/>.
         /// </summary>
         public void ReadAreas()
@@ -352,44 +343,398 @@ namespace eft_dma_radar.Tarkov.Hideout
                 return;
             try
             {
+                // ── Round 1 – dict pointer (dependent chain, must be sequential) ────────
                 var dictPtr = Memory.ReadPtr(AreasControllerBase + OffAreas);
                 if (!dictPtr.IsValidVirtualAddress()) return;
 
-                var count = Memory.ReadValue<int>(dictPtr + DictCountOff);
-                if (count <= 0 || count > 64) return;
-
-                var entriesPtr = Memory.ReadPtr(dictPtr + DictEntriesOff);
-                if (!entriesPtr.IsValidVirtualAddress()) return;
+                // ── Round 2 – count + entriesPtr ─────────────────────────────────────────
+                int count;
+                ulong entriesPtr;
+                using (var r2 = ScatterReadRound.Get(false))
+                {
+                    r2[0].AddEntry<int>(0, dictPtr + DictCountOff);
+                    r2[0].AddEntry<ulong>(1, dictPtr + DictEntriesOff);
+                    r2.Run();
+                    if (!r2[0].TryGetResult<int>(0, out count) || count <= 0 || count > 64) return;
+                    if (!r2[0].TryGetResult<ulong>(1, out entriesPtr) || !entriesPtr.IsValidVirtualAddress()) return;
+                }
 
                 var dataBase = entriesPtr + DictDataOff;
-                var areas    = new List<HideoutAreaInfo>(count);
 
+                // ── Round 3 – per-entry: areaType + areaPtr ───────────────────────────────
+                var areaTypes = new int[count];
+                var areaPtrs  = new ulong[count];
+                using (var r3 = ScatterReadRound.Get(false))
+                {
+                    for (int i = 0; i < count; i++)
+                    {
+                        var entry = dataBase + (ulong)(i * DictEntrySize);
+                        r3[0].AddEntry<int>(i, entry + 8);
+                        r3[1].AddEntry<ulong>(i, entry + (uint)DictValueOff);
+                    }
+                    r3.Run();
+                    for (int i = 0; i < count; i++)
+                    {
+                        r3[0].TryGetResult(i, out areaTypes[i]);
+                        r3[1].TryGetResult(i, out areaPtrs[i]);
+                    }
+                }
+
+                // ── Round 4 – per-area: dataPtr ───────────────────────────────────────────
+                var dataPtrs = new ulong[count];
+                using (var r4 = ScatterReadRound.Get(false))
+                {
+                    for (int i = 0; i < count; i++)
+                        if (areaPtrs[i].IsValidVirtualAddress())
+                            r4[0].AddEntry<ulong>(i, areaPtrs[i] + OffAreaData);
+                    r4.Run();
+                    for (int i = 0; i < count; i++)
+                        r4[0].TryGetResult(i, out dataPtrs[i]);
+                }
+
+                // ── Round 5 – per-area: level + status ────────────────────────────────────
+                var levels   = new int[count];
+                var statuses = new int[count];
+                using (var r5 = ScatterReadRound.Get(false))
+                {
+                    for (int i = 0; i < count; i++)
+                        if (dataPtrs[i].IsValidVirtualAddress())
+                        {
+                            r5[0].AddEntry<int>(i, dataPtrs[i] + OffCurLevel);
+                            r5[1].AddEntry<int>(i, dataPtrs[i] + OffStatus);
+                        }
+                    r5.Run();
+                    for (int i = 0; i < count; i++)
+                    {
+                        r5[0].TryGetResult(i, out levels[i]);
+                        r5[1].TryGetResult(i, out statuses[i]);
+                    }
+                }
+
+                // Identify areas that can still be upgraded
+                var upgIdx = Enumerable.Range(0, count)
+                    .Where(i => areaPtrs[i].IsValidVirtualAddress()
+                             && (EAreaStatus)statuses[i] != EAreaStatus.NoFutureUpgrades)
+                    .ToList();
+
+                // ── Round 6 – upgradeable areas: arrayPtr (_areaLevels) ───────────────────
+                var arrayPtrs = new ulong[count];
+                using (var r6 = ScatterReadRound.Get(false))
+                {
+                    foreach (var i in upgIdx)
+                        r6[0].AddEntry<ulong>(i, areaPtrs[i] + OffAreaLevels);
+                    r6.Run();
+                    foreach (var i in upgIdx)
+                        r6[0].TryGetResult(i, out arrayPtrs[i]);
+                }
+
+                // ── Round 7 – arrayCount + levelObjPtr per upgradeable area ───────────────
+                var arrayCounts  = new int[count];
+                var levelObjPtrs = new ulong[count];
+                using (var r7 = ScatterReadRound.Get(false))
+                {
+                    foreach (var i in upgIdx)
+                    {
+                        if (!arrayPtrs[i].IsValidVirtualAddress()) continue;
+                        var targetIdx = levels[i] + 1;
+                        r7[0].AddEntry<int>(i, arrayPtrs[i] + MemArray<ulong>.CountOffset);
+                        r7[1].AddEntry<ulong>(i,
+                            arrayPtrs[i] + MemArray<ulong>.ArrBaseOffset
+                            + (ulong)(targetIdx * (int)UnityOffsets.ManagedArray.ElementSize));
+                    }
+                    r7.Run();
+                    foreach (var i in upgIdx)
+                    {
+                        r7[0].TryGetResult(i, out arrayCounts[i]);
+                        r7[1].TryGetResult(i, out levelObjPtrs[i]);
+                    }
+                }
+
+                var validUpgIdx = upgIdx
+                    .Where(i => levelObjPtrs[i].IsValidVirtualAddress()
+                             && arrayCounts[i] > levels[i] + 1)
+                    .ToList();
+
+                // ── Round 8 – stagePtr per valid area ──────────────────────────────────────
+                var stagePtrs = new ulong[count];
+                using (var r8 = ScatterReadRound.Get(false))
+                {
+                    foreach (var i in validUpgIdx)
+                        r8[0].AddEntry<ulong>(i, levelObjPtrs[i] + OffStage);
+                    r8.Run();
+                    foreach (var i in validUpgIdx)
+                        r8[0].TryGetResult(i, out stagePtrs[i]);
+                }
+
+                // ── Round 9 – relReqPtr ────────────────────────────────────────────────────
+                var relReqPtrs = new ulong[count];
+                using (var r9 = ScatterReadRound.Get(false))
+                {
+                    foreach (var i in validUpgIdx)
+                        if (stagePtrs[i].IsValidVirtualAddress())
+                            r9[0].AddEntry<ulong>(i, stagePtrs[i] + OffRequirements);
+                    r9.Run();
+                    foreach (var i in validUpgIdx)
+                        r9[0].TryGetResult(i, out relReqPtrs[i]);
+                }
+
+                // ── Round 10 – listPtr ─────────────────────────────────────────────────────
+                var listPtrs = new ulong[count];
+                using (var r10 = ScatterReadRound.Get(false))
+                {
+                    foreach (var i in validUpgIdx)
+                        if (relReqPtrs[i].IsValidVirtualAddress())
+                            r10[0].AddEntry<ulong>(i, relReqPtrs[i] + OffRelData);
+                    r10.Run();
+                    foreach (var i in validUpgIdx)
+                        r10[0].TryGetResult(i, out listPtrs[i]);
+                }
+
+                // ── Round 11 – reqCount + itemsArrPtr per area ─────────────────────────────
+                var reqCounts    = new int[count];
+                var itemsArrPtrs = new ulong[count];
+                using (var r11 = ScatterReadRound.Get(false))
+                {
+                    foreach (var i in validUpgIdx)
+                        if (listPtrs[i].IsValidVirtualAddress())
+                        {
+                            r11[0].AddEntry<int>(i, listPtrs[i] + MemList<ulong>.CountOffset);
+                            r11[1].AddEntry<ulong>(i, listPtrs[i] + MemList<ulong>.ArrOffset);
+                        }
+                    r11.Run();
+                    foreach (var i in validUpgIdx)
+                    {
+                        r11[0].TryGetResult(i, out reqCounts[i]);
+                        r11[1].TryGetResult(i, out itemsArrPtrs[i]);
+                    }
+                }
+
+                // Build flat list of (areaIdx, reqSlot) — one entry per requirement pointer
+                var flatMap = new List<(int areaIdx, int slot)>();
+                foreach (var i in validUpgIdx)
+                {
+                    int rc = reqCounts[i];
+                    if (rc <= 0 || rc > 256 || !itemsArrPtrs[i].IsValidVirtualAddress()) continue;
+                    for (int j = 0; j < rc; j++)
+                        flatMap.Add((i, j));
+                }
+
+                int flat = flatMap.Count;
+                var reqPtrs    = new ulong[flat];
+                var fulfilled  = new bool[flat];
+                var vtablePtrs = new ulong[flat];
+                var namePtrs   = new ulong[flat];
+
+                // ── Round 12 – reqPtr per flat requirement ─────────────────────────────────
+                using (var r12 = ScatterReadRound.Get(false))
+                {
+                    for (int k = 0; k < flat; k++)
+                    {
+                        var (ai, slot) = flatMap[k];
+                        var dataStart  = itemsArrPtrs[ai] + MemList<ulong>.ArrStartOffset;
+                        r12[0].AddEntry<ulong>(k, dataStart + (ulong)(slot * (int)UnityOffsets.ManagedArray.ElementSize));
+                    }
+                    r12.Run();
+                    for (int k = 0; k < flat; k++)
+                        r12[0].TryGetResult(k, out reqPtrs[k]);
+                }
+
+                // ── Round 13 – fulfilled + vtablePtr ──────────────────────────────────────
+                using (var r13 = ScatterReadRound.Get(false))
+                {
+                    for (int k = 0; k < flat; k++)
+                        if (reqPtrs[k].IsValidVirtualAddress())
+                        {
+                            r13[0].AddEntry<bool>(k, reqPtrs[k] + OffReqFulfilled);
+                            r13[1].AddEntry<ulong>(k, reqPtrs[k]);  // vtable is at +0x0
+                        }
+                    r13.Run();
+                    for (int k = 0; k < flat; k++)
+                    {
+                        r13[0].TryGetResult(k, out fulfilled[k]);
+                        r13[1].TryGetResult(k, out vtablePtrs[k]);
+                    }
+                }
+
+                // ── Round 14 – namePtr (vtable + 0x10) ────────────────────────────────────
+                using (var r14 = ScatterReadRound.Get(false))
+                {
+                    for (int k = 0; k < flat; k++)
+                        if (vtablePtrs[k].IsValidVirtualAddress())
+                            r14[0].AddEntry<ulong>(k, vtablePtrs[k] + 0x10);
+                    r14.Run();
+                    for (int k = 0; k < flat; k++)
+                        r14[0].TryGetResult(k, out namePtrs[k]);
+                }
+
+                // Sequential class name reads — UTF-8 C strings, cached, ~10 unique types
+                var classNames = new string[flat];
+                for (int k = 0; k < flat; k++)
+                    if (namePtrs[k].IsValidVirtualAddress())
+                        classNames[k] = Memory.ReadString(namePtrs[k], 64, useCache: true);
+
+                // ── Round 15 – type-specific fields (multi-index) ─────────────────────────
+                // r[0] = field @ 0x48 (ptr: tplId / traderId)
+                // r[1] = baseCount @ 0x5C (int: Item/Tool)
+                // r[2] = userCount @ 0x54 (int: Item/Tool)
+                // r[3] = areaType  @ 0x38 (int: Area requirement)
+                // r[4] = reqLevel  @ 0x3C (int: Area requirement)
+                // r[5] = skillName @ 0x38 (ptr: Skill)
+                // r[6] = skillLevel / loyaltyLevel @ 0x40 (int)
+                var field48Ptrs   = new ulong[flat];
+                var baseCounts    = new int[flat];
+                var userCounts    = new int[flat];
+                var areaTypeVals  = new int[flat];
+                var reqLevels     = new int[flat];
+                var skillNamePtrs = new ulong[flat];
+                var intAt40       = new int[flat];
+
+                using (var r15 = ScatterReadRound.Get(false))
+                {
+                    for (int k = 0; k < flat; k++)
+                    {
+                        var cn = classNames[k];
+                        if (cn is null || !reqPtrs[k].IsValidVirtualAddress()) continue;
+
+                        if (cn.Contains("Item", StringComparison.OrdinalIgnoreCase)
+                         || cn.Contains("Tool", StringComparison.OrdinalIgnoreCase))
+                        {
+                            r15[0].AddEntry<ulong>(k, reqPtrs[k] + 0x48);
+                            r15[1].AddEntry<int>(k, reqPtrs[k] + OffReqBaseCount);
+                            r15[2].AddEntry<int>(k, reqPtrs[k] + OffReqUserCount);
+                        }
+                        else if (cn.Contains("Area", StringComparison.OrdinalIgnoreCase))
+                        {
+                            r15[3].AddEntry<int>(k, reqPtrs[k] + 0x38);
+                            r15[4].AddEntry<int>(k, reqPtrs[k] + 0x3C);
+                        }
+                        else if (cn.Contains("Skill", StringComparison.OrdinalIgnoreCase))
+                        {
+                            r15[5].AddEntry<ulong>(k, reqPtrs[k] + 0x38);
+                            r15[6].AddEntry<int>(k, reqPtrs[k] + 0x40);
+                        }
+                        else if (cn.Contains("Loyalty", StringComparison.OrdinalIgnoreCase))
+                        {
+                            r15[0].AddEntry<ulong>(k, reqPtrs[k] + 0x48); // traderId ptr
+                            r15[6].AddEntry<int>(k, reqPtrs[k] + 0x40);   // loyaltyLevel
+                        }
+                    }
+                    r15.Run();
+                    for (int k = 0; k < flat; k++)
+                    {
+                        r15[0].TryGetResult(k, out field48Ptrs[k]);
+                        r15[1].TryGetResult(k, out baseCounts[k]);
+                        r15[2].TryGetResult(k, out userCounts[k]);
+                        r15[3].TryGetResult(k, out areaTypeVals[k]);
+                        r15[4].TryGetResult(k, out reqLevels[k]);
+                        r15[5].TryGetResult(k, out skillNamePtrs[k]);
+                        r15[6].TryGetResult(k, out intAt40[k]);
+                    }
+                }
+
+                // ── Round 16 – UnicodeString scatter for string fields ─────────────────────
+                // r[0] = field48 (tplId for Item/Tool, traderId for Loyalty) at ptr + 0x14
+                // r[1] = skillName at ptr + 0x14
+                const int StringCB = 128;
+                var tplOrTraderIds = new string[flat];
+                var skillNames     = new string[flat];
+
+                using (var r16 = ScatterReadRound.Get(false))
+                {
+                    for (int k = 0; k < flat; k++)
+                    {
+                        var cn = classNames[k];
+                        if (cn is null) continue;
+
+                        if ((cn.Contains("Item", StringComparison.OrdinalIgnoreCase)
+                          || cn.Contains("Tool", StringComparison.OrdinalIgnoreCase)
+                          || cn.Contains("Loyalty", StringComparison.OrdinalIgnoreCase))
+                         && field48Ptrs[k].IsValidVirtualAddress())
+                        {
+                            r16[0].AddEntry<UnicodeString>(k, field48Ptrs[k] + 0x14, StringCB);
+                        }
+                        else if (cn.Contains("Skill", StringComparison.OrdinalIgnoreCase)
+                              && skillNamePtrs[k].IsValidVirtualAddress())
+                        {
+                            r16[1].AddEntry<UnicodeString>(k, skillNamePtrs[k] + 0x14, StringCB);
+                        }
+                    }
+                    r16.Run();
+                    for (int k = 0; k < flat; k++)
+                    {
+                        if (r16[0].TryGetResult<UnicodeString>(k, out var s0)) tplOrTraderIds[k] = s0;
+                        if (r16[1].TryGetResult<UnicodeString>(k, out var s1)) skillNames[k]     = s1;
+                    }
+                }
+
+                // ── Build result list ──────────────────────────────────────────────────────
+                // Group requirements back to their area index
+                var reqsByArea = new Dictionary<int, List<HideoutRequirement>>();
+                foreach (var i in validUpgIdx)
+                    reqsByArea[i] = new List<HideoutRequirement>(reqCounts[i]);
+
+                for (int k = 0; k < flat; k++)
+                {
+                    var (ai, slot) = flatMap[k];
+                    if (!reqsByArea.TryGetValue(ai, out var reqList)) continue;
+
+                    var cn = classNames[k];
+                    if (cn is null || !reqPtrs[k].IsValidVirtualAddress()) continue;
+
+                    HideoutRequirement req;
+                    bool isFulfilled = fulfilled[k];
+
+                    if (cn.Contains("Tool", StringComparison.OrdinalIgnoreCase))
+                    {
+                        req = BuildItemOrToolReq(ERequirementType.Tool, isFulfilled,
+                            tplOrTraderIds[k], baseCounts[k], userCounts[k]);
+                    }
+                    else if (cn.Contains("Item", StringComparison.OrdinalIgnoreCase))
+                    {
+                        req = BuildItemOrToolReq(ERequirementType.Item, isFulfilled,
+                            tplOrTraderIds[k], baseCounts[k], userCounts[k]);
+                    }
+                    else if (cn.Contains("Area", StringComparison.OrdinalIgnoreCase))
+                    {
+                        req = new HideoutRequirement(ERequirementType.Area, isFulfilled,
+                            RequiredArea: (EAreaType)areaTypeVals[k], RequiredLevel: reqLevels[k]);
+                    }
+                    else if (cn.Contains("Skill", StringComparison.OrdinalIgnoreCase))
+                    {
+                        req = new HideoutRequirement(ERequirementType.Skill, isFulfilled,
+                            SkillName: skillNames[k], SkillLevel: intAt40[k]);
+                    }
+                    else if (cn.Contains("Loyalty", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string traderId   = tplOrTraderIds[k];
+                        string traderName = null;
+                        if (traderId is not null)
+                            EftDataManager.AllTraders.TryGetValue(traderId, out traderName);
+                        req = new HideoutRequirement(ERequirementType.TraderLoyalty, isFulfilled,
+                            TraderId: traderId, TraderName: traderName, LoyaltyLevel: intAt40[k]);
+                    }
+                    else if (cn.Contains("Trader", StringComparison.OrdinalIgnoreCase))
+                        req = new HideoutRequirement(ERequirementType.TraderUnlock, isFulfilled);
+                    else if (cn.Contains("Quest", StringComparison.OrdinalIgnoreCase))
+                        req = new HideoutRequirement(ERequirementType.QuestComplete, isFulfilled);
+                    else
+                        req = new HideoutRequirement(ERequirementType.Resource, isFulfilled);
+
+                    var label = $"{(EAreaType)areaTypes[ai]} lv{levels[ai]}→{levels[ai] + 1}";
+                    XMLogging.WriteLine($"[HideoutManager] [{label}] req[{slot}] {FormatReq(req)}");
+                    reqList.Add(req);
+                }
+
+                var areas = new List<HideoutAreaInfo>(count);
                 for (int i = 0; i < count; i++)
                 {
-                    try
-                    {
-                        var entryAddr = dataBase + (ulong)(i * DictEntrySize);
-                        var areaType  = (EAreaType)Memory.ReadValue<int>(entryAddr + 8);
-                        var areaPtr   = Memory.ReadPtr(entryAddr + (uint)DictValueOff);
-                        if (!areaPtr.IsValidVirtualAddress()) continue;
-
-                        var dataPtr = Memory.ReadPtr(areaPtr + OffAreaData);
-                        if (!dataPtr.IsValidVirtualAddress()) continue;
-
-                        var level  = Memory.ReadValue<int>(dataPtr + OffCurLevel);
-                        var status = (EAreaStatus)Memory.ReadValue<int>(dataPtr + OffStatus);
-
-                        // No point reading requirements for areas that are already max level
-                        var reqs = status == EAreaStatus.NoFutureUpgrades
-                            ? []
-                            : ReadNextLevelRequirements(areaPtr, level, areaType);
-
-                        areas.Add(new HideoutAreaInfo(areaType, level, status, reqs));
-                    }
-                    catch (Exception ex)
-                    {
-                        XMLogging.WriteLine($"[HideoutManager] ReadAreas entry error: {ex.Message}");
-                    }
+                    if (!areaPtrs[i].IsValidVirtualAddress()) continue;
+                    var reqs = reqsByArea.TryGetValue(i, out var list) ? list : (IReadOnlyList<HideoutRequirement>)[];
+                    areas.Add(new HideoutAreaInfo(
+                        (EAreaType)areaTypes[i],
+                        levels[i],
+                        (EAreaStatus)statuses[i],
+                        reqs));
                 }
 
                 Areas = areas;
@@ -431,151 +776,16 @@ namespace eft_dma_radar.Tarkov.Hideout
         }
 
         /// <summary>
-        /// Reads the next-level upgrade requirements for a single hideout area.
-        /// <para>
-        /// Always reads via the managed array:<br/>
-        /// <c>HideoutArea._areaLevels (0x48)[currentLevel + 1] → _stage (0xA0) → Requirements (0x18) → Data (0x10)</c>
-        /// </para>
-        /// <para>
-        /// <c>_currentLevel</c> (+0x78) points to the <b>current</b> built level, not the next —
-        /// it must not be used for requirement lookups.
-        /// </para>
+        /// Constructs an Item or Tool requirement from pre-read scattered field values.
         /// </summary>
-        private static IReadOnlyList<HideoutRequirement> ReadNextLevelRequirements(
-            ulong areaPtr, int currentLevel, EAreaType areaType)
+        private static HideoutRequirement BuildItemOrToolReq(
+            ERequirementType type, bool fulfilled, string tplId, int required, int current)
         {
-            try
-            {
-                // Always use _areaLevels[currentLevel + 1] — index 1 for lv0, 2 for lv1, etc.
-                var arrayPtr = Memory.ReadPtr(areaPtr + OffAreaLevels);
-                if (!arrayPtr.IsValidVirtualAddress()) return [];
-
-                var arrayCount = Memory.ReadValue<int>(arrayPtr + MemArray<ulong>.CountOffset);
-                var targetIndex = currentLevel + 1;
-                if (arrayCount <= targetIndex) return [];
-
-                var levelObjPtr = Memory.ReadPtr(
-                    arrayPtr + MemArray<ulong>.ArrBaseOffset
-                    + (ulong)(targetIndex * (int)UnityOffsets.ManagedArray.ElementSize));
-
-                if (!levelObjPtr.IsValidVirtualAddress()) return [];
-
-                // _stage (0xA0) → Requirements (0x18) → Data (0x10)
-                var stagePtr = Memory.ReadPtr(levelObjPtr + OffStage);
-                if (!stagePtr.IsValidVirtualAddress()) return [];
-
-                var relReqPtr = Memory.ReadPtr(stagePtr + OffRequirements);
-                if (!relReqPtr.IsValidVirtualAddress()) return [];
-
-                var listPtr = Memory.ReadPtr(relReqPtr + OffRelData);
-                if (!listPtr.IsValidVirtualAddress()) return [];
-
-                var reqCount = Memory.ReadValue<int>(listPtr + MemList<ulong>.CountOffset);
-                if (reqCount <= 0 || reqCount > 256) return [];
-
-                var itemsArrPtr = Memory.ReadPtr(listPtr + MemList<ulong>.ArrOffset);
-                if (!itemsArrPtr.IsValidVirtualAddress()) return [];
-
-                var label = $"{areaType} lv{currentLevel}→{currentLevel + 1}";
-                return ReadRequirementsFromDataStart(
-                    itemsArrPtr + MemList<ulong>.ArrStartOffset, reqCount, label);
-            }
-            catch
-            {
-                return [];
-            }
-        }
-
-        /// <summary>
-        /// Reads <paramref name="count"/> <see cref="HideoutRequirement"/> objects from a
-        /// contiguous block of pointer-sized elements starting at <paramref name="dataStart"/>.
-        /// </summary>
-        private static List<HideoutRequirement> ReadRequirementsFromDataStart(
-            ulong dataStart, int count, string areaLabel)
-        {
-            var results = new List<HideoutRequirement>(count);
-            for (int r = 0; r < count; r++)
-            {
-                try
-                {
-                    var reqPtr = Memory.ReadPtr(
-                        dataStart + (ulong)(r * (int)UnityOffsets.ManagedArray.ElementSize));
-                    if (!reqPtr.IsValidVirtualAddress()) continue;
-
-                    var fulfilled = Memory.ReadValue<bool>(reqPtr + OffReqFulfilled);
-
-                    var className = ObjectClass.ReadName(reqPtr, 64, useCache: false);
-                    if (className is null) continue;
-
-                    HideoutRequirement req;
-
-                    if (className.Contains("Tool", StringComparison.OrdinalIgnoreCase))
-                    {
-                        req = ReadItemOrToolRequirement(reqPtr, ERequirementType.Tool, fulfilled);
-                    }
-                    else if (className.Contains("Item", StringComparison.OrdinalIgnoreCase))
-                    {
-                        req = ReadItemOrToolRequirement(reqPtr, ERequirementType.Item, fulfilled);
-                    }
-                    else if (className.Contains("Area", StringComparison.OrdinalIgnoreCase))
-                    {
-                        // AreaRequirement: AreaType @ 0x38, RequiredLevel @ 0x3C
-                        var area = (EAreaType)Memory.ReadValue<int>(reqPtr + 0x38);
-                        var lvl  = Memory.ReadValue<int>(reqPtr + 0x3C);
-                        req = new HideoutRequirement(ERequirementType.Area, fulfilled, RequiredArea: area, RequiredLevel: lvl);
-                    }
-                    else if (className.Contains("Skill", StringComparison.OrdinalIgnoreCase))
-                    {
-                        // SkillRequirement: SkillName @ 0x38, SkillLevel @ 0x40
-                        var skill = TryReadString(reqPtr + 0x38);
-                        var lvl   = Memory.ReadValue<int>(reqPtr + 0x40);
-                        req = new HideoutRequirement(ERequirementType.Skill, fulfilled, SkillName: skill, SkillLevel: lvl);
-                    }
-                    else if (className.Contains("Loyalty", StringComparison.OrdinalIgnoreCase))
-                    {
-                        // TraderLoyaltyRequirement: LoyaltyLevel @ 0x40, TraderId @ 0x48
-                        var traderId   = TryReadString(reqPtr + 0x48);
-                        var lvl        = Memory.ReadValue<int>(reqPtr + 0x40);
-                        string traderName = null;
-                        if (traderId is not null)
-                            EftDataManager.AllTraders.TryGetValue(traderId, out traderName);
-                        req = new HideoutRequirement(ERequirementType.TraderLoyalty, fulfilled,
-                            TraderId: traderId, TraderName: traderName, LoyaltyLevel: lvl);
-                    }
-                    else if (className.Contains("Trader", StringComparison.OrdinalIgnoreCase))
-                        req = new HideoutRequirement(ERequirementType.TraderUnlock, fulfilled);
-                    else if (className.Contains("Quest", StringComparison.OrdinalIgnoreCase))
-                        req = new HideoutRequirement(ERequirementType.QuestComplete, fulfilled);
-                    else
-                        req = new HideoutRequirement(ERequirementType.Resource, fulfilled);
-
-                    XMLogging.WriteLine($"[HideoutManager] [{areaLabel}] req[{r}] {FormatReq(req)}");
-                    results.Add(req);
-                }
-                catch { }
-            }
-            return results;
-        }
-
-        /// <summary>
-        /// Reads an ItemRequirement or ToolRequirement from memory, including template id,
-        /// required/current counts, and resolved item name.
-        /// </summary>
-        private static HideoutRequirement ReadItemOrToolRequirement(
-            ulong reqPtr, ERequirementType type, bool fulfilled)
-        {
-            // <TemplateId> @ 0x48, _baseCount @ 0x5C, <UserItemsCount> @ 0x54
-            var tpl      = TryReadString(reqPtr + 0x48);
-            var required = Memory.ReadValue<int>(reqPtr + OffReqBaseCount);
-            var current  = Memory.ReadValue<int>(reqPtr + OffReqUserCount);
-
-            // Resolve human-readable name from market data
             string itemName = null;
-            if (tpl is not null && EftDataManager.AllItems.TryGetValue(tpl, out var entry))
+            if (tplId is not null && EftDataManager.AllItems.TryGetValue(tplId, out var entry))
                 itemName = entry.ShortName;
-
             return new HideoutRequirement(type, fulfilled,
-                ItemTemplateId: tpl,
+                ItemTemplateId: tplId,
                 ItemName:       itemName,
                 RequiredCount:  required,
                 CurrentCount:   current);
@@ -594,21 +804,6 @@ namespace eft_dma_radar.Tarkov.Hideout
                 => $"{req.TraderName ?? req.TraderId ?? "-"} loyalty {req.LoyaltyLevel}{(req.Fulfilled ? " ✓" : "")}",
             _ => req.Fulfilled ? "✓" : ""
         };
-
-
-        /// <summary>
-        /// Reads a Unity string from the pointer stored at <paramref name="fieldAddr"/>.
-        /// Returns null if the pointer is invalid or the read fails.
-        /// </summary>
-        private static string TryReadString(ulong fieldAddr)
-        {
-            try
-            {
-                var ptr = Memory.ReadPtr(fieldAddr);
-                return ptr.IsValidVirtualAddress() ? Memory.ReadUnityString(ptr) : null;
-            }
-            catch { return null; }
-        }
 
         /// <summary>
         /// Pulls fresh market prices from Tarkov.Dev, re-scans the stash pointer chain if
@@ -654,6 +849,8 @@ namespace eft_dma_radar.Tarkov.Hideout
         /// <summary>
         /// Recursively walks a Grid[] array, resolves each item via <see cref="EftDataManager.AllItems"/>
         /// and appends matched items (with stack count and prices) to <paramref name="results"/>.
+        /// Top-level items in each grid are read via scatter; recursive container contents
+        /// remain sequential (uncommon path, bounded by recurseDepth).
         /// </summary>
         private static void GetItemsInGrid(ulong gridsArrayPtr, List<StashItem> results, int recurseDepth = 0)
         {
@@ -669,30 +866,84 @@ namespace eft_dma_radar.Tarkov.Hideout
                     var itemListPtr    = Memory.ReadPtr(containedItems + GridContainedItems.Items);
                     using var itemList = MemList<ulong>.Get(itemListPtr);
 
-                    foreach (var item in itemList)
+                    int itemCount = itemList.Count;
+                    if (itemCount == 0) continue;
+
+                    // ── Scatter A – templatePtr per item ─────────────────────────────────
+                    var templatePtrs = new ulong[itemCount];
+                    using (var rA = ScatterReadRound.Get(false))
+                    {
+                        for (int k = 0; k < itemCount; k++)
+                            rA[0].AddEntry<ulong>(k, itemList[k] + LootItem.Template);
+                        rA.Run();
+                        for (int k = 0; k < itemCount; k++)
+                            rA[0].TryGetResult(k, out templatePtrs[k]);
+                    }
+
+                    // ── Scatter B – MongoID struct + stackCount + childGridsPtr ──────────
+                    // r[0] = MongoID (value type, reads struct at templatePtr + ItemTemplate._id)
+                    // r[1] = stackCount (int at item + StackObjectsCount)
+                    // r[2] = childGridsPtr (ulong at item + LootItemMod.Grids)
+                    var mongoIds       = new SDK.Types.MongoID[itemCount];
+                    var stackCounts    = new int[itemCount];
+                    var childGridsPtrs = new ulong[itemCount];
+                    using (var rB = ScatterReadRound.Get(false))
+                    {
+                        for (int k = 0; k < itemCount; k++)
+                        {
+                            if (!templatePtrs[k].IsValidVirtualAddress()) continue;
+                            rB[0].AddEntry<SDK.Types.MongoID>(k, templatePtrs[k] + ItemTemplate._id);
+                            rB[1].AddEntry<int>(k, itemList[k] + LootItem.StackObjectsCount);
+                            rB[2].AddEntry<ulong>(k, itemList[k] + LootItemMod.Grids);
+                        }
+                        rB.Run();
+                        for (int k = 0; k < itemCount; k++)
+                        {
+                            rB[0].TryGetResult(k, out mongoIds[k]);
+                            rB[1].TryGetResult(k, out stackCounts[k]);
+                            rB[2].TryGetResult(k, out childGridsPtrs[k]);
+                        }
+                    }
+
+                    // ── Scatter C – UnicodeString for each MongoID.StringID ───────────────
+                    var ids = new string[itemCount];
+                    using (var rC = ScatterReadRound.Get(false))
+                    {
+                        for (int k = 0; k < itemCount; k++)
+                        {
+                            var sid = mongoIds[k].StringID;
+                            if (sid.IsValidVirtualAddress())
+                                rC[0].AddEntry<UnicodeString>(k, sid + 0x14, 48);
+                        }
+                        rC.Run();
+                        for (int k = 0; k < itemCount; k++)
+                            if (rC[0].TryGetResult<UnicodeString>(k, out var s)) ids[k] = s;
+                    }
+
+                    // ── Resolve and record ────────────────────────────────────────────────
+                    for (int k = 0; k < itemCount; k++)
+                    {
                         try
                         {
-                            var template = Memory.ReadPtr(item + LootItem.Template);
-                            var idMongo  = Memory.ReadValue<SDK.Types.MongoID>(template + ItemTemplate._id);
-                            var id       = Memory.ReadUnityString(idMongo.StringID);
+                            var id = ids[k];
+                            if (id is null) continue;
 
                             if (EftDataManager.AllItems.TryGetValue(id, out var entry))
                             {
-                                var stackCount = Memory.ReadValue<int>(item + LootItem.StackObjectsCount);
                                 results.Add(new StashItem(
-                                    Id:              entry.BsgId,
-                                    Name:            entry.Name,
-                                    TraderPrice:     entry.TraderPrice,
-                                    BestTraderName:  entry.BestTraderName,
-                                    FleaPrice:       entry.FleaPrice,
-                                    StackCount:      Math.Max(1, stackCount)));
+                                    Id:             entry.BsgId,
+                                    Name:           entry.Name,
+                                    TraderPrice:    entry.TraderPrice,
+                                    BestTraderName: entry.BestTraderName,
+                                    FleaPrice:      entry.FleaPrice,
+                                    StackCount:     Math.Max(1, stackCounts[k])));
                             }
 
-                            // recurse into nested containers (bags, cases, etc.)
-                            var childGridsPtr = Memory.ReadValue<ulong>(item + LootItemMod.Grids);
-                            GetItemsInGrid(childGridsPtr, results, recurseDepth);
+                            // Recurse into nested containers (bags, cases, etc.)
+                            GetItemsInGrid(childGridsPtrs[k], results, recurseDepth);
                         }
                         catch { }
+                    }
                 }
                 catch { }
             }
