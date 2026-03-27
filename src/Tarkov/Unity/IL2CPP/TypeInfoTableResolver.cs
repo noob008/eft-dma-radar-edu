@@ -21,10 +21,10 @@ namespace eft_dma_radar.Tarkov.Unity.IL2CPP
         private static readonly (string Sig, int RelOffset, int InstrLen, string Desc)[] TypeInfoTableSigs =
         [
             // Write-side (initialization): mov [rip+rel32], rax; mov rax, [rip+rel32]; mov edx, [rax+...]
-            ("48 89 05 ? ? ? ? 48 8B 05 ? ? ? ? 8B 50", 3, 7, "write: mov [rip+rel32],rax (init store)"),
+            ("48 89 05 ? ? ? ? 48 8B 05 ? ? ? ? 8B 48", 3, 7, "write: mov [rip+rel32],rax (init store)"),
 
             // Read-side (lookup function): mov rax, [rip+rel32]; lea r14,[rax+rsi*8]; ...; nop; test rdi,rdi; jnz
-            ("48 8B 05 ? ? ? ? ? ? ? ? ? ? ? 90 48 85 FF 0F 85", 3, 7, "read: mov rax,[rip+rel32] (table lookup)"),
+            ("48 8B 05 ? ? ? ? ? ? ? ? ? ? ? 90 48 85 DB 75 ? 48 8D 2D ? ? ? ? 48 89 6C 24 ? 48 8B CD E8 ? ? ? ? 90 ? ? ? 48 85 DB 75 ? 8B CF", 3, 7, "read: mov rax,[rip+rel32] (table lookup)"),
         ];
 
         /// <summary>
