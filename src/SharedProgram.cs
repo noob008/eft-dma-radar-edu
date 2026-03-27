@@ -6,6 +6,7 @@ using System.Net.Http.Headers;
 using System.Net;
 using System.IO;
 using System.Net.Http;
+using System.Management;
 
 namespace eft_dma_radar
 {
@@ -38,6 +39,7 @@ namespace eft_dma_radar
             ArgumentNullException.ThrowIfNull(config, nameof(config));
             ConfigPath = configPath;
             Config = config;
+            CheckSystemRequirements();
             _mutex = new Mutex(true, _mutexID, out bool singleton);
             if (!singleton)
                 throw new ApplicationException("The Application Is Already Running!");
@@ -79,6 +81,48 @@ namespace eft_dma_radar
             var highPerformanceGuid = new Guid("8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c");
             if (Native.PowerSetActiveScheme(IntPtr.Zero, ref highPerformanceGuid) != 0)
                 XMLogging.WriteLine("WARNING: Unable to set High Performance Power Plan");
+        }
+
+        /// <summary>
+        /// Validates that the host system meets the minimum requirements to run the application.
+        /// Throws <see cref="PlatformNotSupportedException"/> when a hard requirement is not met.
+        /// </summary>
+        private static void CheckSystemRequirements()
+        {
+            // Hard requirement: 64-bit OS
+            if (!Environment.Is64BitOperatingSystem)
+                throw new PlatformNotSupportedException(
+                    "This application requires a 64-bit (x64) Windows operating system.");
+
+            // Hard requirement: Windows 10 build 17763 (1809, October 2018 Update) or later.
+            // .NET 10 itself requires Windows 10+; DMA APIs and PerMonitorV2 DPI need 1809+.
+            var os = Environment.OSVersion;
+            const int MinBuild = 17763;
+            if (os.Platform != PlatformID.Win32NT || os.Version.Build < MinBuild)
+                throw new PlatformNotSupportedException(
+                    $"Windows 10 version 1809 (OS build {MinBuild}) or later is required.\n" +
+                    $"Detected: {os.VersionString}");
+
+            XMLogging.WriteLine($"[SystemRequirements] OS: {os.VersionString} \u2713");
+
+            // Soft check: physical RAM — recommend ≥ 8 GB
+            try
+            {
+                using var searcher = new ManagementObjectSearcher("SELECT TotalPhysicalMemory FROM Win32_ComputerSystem");
+                foreach (ManagementObject obj in searcher.Get())
+                {
+                    var totalGb = Convert.ToInt64(obj["TotalPhysicalMemory"]) / (1024.0 * 1024.0 * 1024.0);
+                    if (totalGb < 8.0)
+                        XMLogging.WriteLine($"[SystemRequirements] WARNING: {totalGb:F1} GB RAM detected — 8 GB or more is recommended for stable operation.");
+                    else
+                        XMLogging.WriteLine($"[SystemRequirements] RAM: {totalGb:F1} GB \u2713");
+                    break;
+                }
+            }
+            catch (Exception ex)
+            {
+                XMLogging.WriteLine($"[SystemRequirements] RAM check skipped: {ex.Message}");
+            }
         }
 
         /// <summary>

@@ -12,26 +12,28 @@
 
 	<compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
 		<application>
-			<!-- Windows 7 -->
-			<supportedOS Id="{35138b9a-5d96-4fbd-8e2d-a2440225f93a}" />
-			<!-- Windows 8 -->
-			<supportedOS Id="{4a2f28e3-53b9-4441-ba9c-d69d4a4a6e38}" />
-			<!-- Windows 8.1 -->
-			<supportedOS Id="{1f676c76-80e1-4239-95bb-83d0f6d0da78}" />
-			<!-- Windows 10 -->
-			<supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}" />
-			<!-- Windows 11 -->
+			<!-- Windows 10 and Windows 11 (share the same compatibility GUID) -->
 			<supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}" />
 		</application>
 	</compatibility>
 
 	<application xmlns="urn:schemas-microsoft-com:asm.v3">
 		<windowsSettings>
-			<!-- Enable long path support -->
+			<!-- Enable long path support (Windows 10 1607+) -->
 			<longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>
 
 			<!-- Disable window filtering -->
 			<disableWindowFiltering xmlns="http://schemas.microsoft.com/SMI/2011/WindowsSettings">true</disableWindowFiltering>
+
+			<!-- Use UTF-8 as the active code page for correct international character handling (Windows 10 1903+) -->
+			<activeCodePage xmlns="http://schemas.microsoft.com/SMI/2019/WindowsSettings">UTF-8</activeCodePage>
+
+			<!-- Use the modern segment heap allocator for reduced memory footprint (Windows 10 1507+) -->
+			<heapType xmlns="http://schemas.microsoft.com/SMI/2020/WindowsSettings">SegmentHeap</heapType>
+
+			<!-- Per-monitor v2 DPI awareness — must be declared here so Windows applies it before any code runs.
+				 ApplicationHighDpiMode in the .csproj is a no-op when a custom manifest is present. -->
+			<dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
 		</windowsSettings>
 	</application>
 </assembly>
