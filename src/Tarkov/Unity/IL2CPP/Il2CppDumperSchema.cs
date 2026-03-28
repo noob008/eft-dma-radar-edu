@@ -176,8 +176,7 @@ namespace eft_dma_radar.Tarkov.Unity.IL2CPP
                 F("UnsharpRadiusBlur"), F("UnsharpBias"),
             ]),
 
-            // HealthInfo → HealthController
-            C("HealthInfo", [F("Energy"), F("Hydration")], cs: "HealthController"),
+            // HealthController offsets are pinned as const in SDK.cs — no dynamic scan needed.
 
             // ExfiltrationController → ExfilController
             C("ExfiltrationController", [

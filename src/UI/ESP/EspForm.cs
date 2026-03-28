@@ -974,7 +974,7 @@ private static void DrawFireportAim(SKCanvas canvas, LocalPlayer localPlayer)
         private void DrawMagazine(SKCanvas canvas, LocalPlayer localPlayer)
         {
             var mag = localPlayer.Firearm.Magazine;
-            string counter = mag.IsValid ? $"{mag.Count} / {mag.MaxCount}" : "-- / --";
+            string counter = mag.IsValid ? $"{mag.CountWithFallback} / {mag.MaxCountWithFallback}" : "-- / --";
             var wepInfo = mag.WeaponInfo;
 
             string magazineText = counter;

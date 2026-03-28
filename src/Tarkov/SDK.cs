@@ -186,8 +186,8 @@ namespace SDK
 		//public static class HealthInfo
 		public readonly partial struct HealthController
 		{
-			public static uint Energy = 0x68;
-			public static uint Hydration = 0x70;
+			public const uint Energy = 0x68;
+			public const uint Hydration = 0x70;
 		}
 		//public static class ExfiltrationController
 		public readonly partial struct ExfilController

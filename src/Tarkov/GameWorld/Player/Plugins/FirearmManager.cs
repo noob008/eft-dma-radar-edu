@@ -272,10 +272,15 @@ namespace eft_dma_radar.Tarkov.EFTPlayer.Plugins
             private string _fireType;
             private string _ammo;
 
+            private string _lastValidAmmo;
+            private string _lastValidFireType;
+            private int _lastValidCount;
+            private int _lastValidMaxCount;
+
             /// <summary>
             /// True if the MagazineManager is in a valid state for data output.
             /// </summary>
-            public bool IsValid => MaxCount > 0;
+            public bool IsValid => MaxCount > 0 || _lastValidMaxCount > 0;
             /// <summary>
             /// Current ammo count in Magazine.
             /// </summary>
@@ -285,6 +290,14 @@ namespace eft_dma_radar.Tarkov.EFTPlayer.Plugins
             /// </summary>
             public int MaxCount { get; private set; }
             /// <summary>
+            /// Current ammo count, falling back to last valid reading if current is zero.
+            /// </summary>
+            public int CountWithFallback => Count > 0 ? Count : _lastValidCount;
+            /// <summary>
+            /// Maximum ammo count, falling back to last valid reading if current is zero.
+            /// </summary>
+            public int MaxCountWithFallback => MaxCount > 0 ? MaxCount : _lastValidMaxCount;
+            /// <summary>
             /// Weapon Fire Mode & Ammo Type in a formatted string.
             /// </summary>
             public string WeaponInfo
@@ -292,8 +305,8 @@ namespace eft_dma_radar.Tarkov.EFTPlayer.Plugins
                 get
                 {
                     string result = "";
-                    string ft = _fireType;
-                    string ammo = _ammo;
+                    string ft = _fireType ?? _lastValidFireType;
+                    string ammo = _ammo ?? _lastValidAmmo;
                     if (ft is not null)
                         result += $"{ft}: ";
                     if (ammo is not null)
@@ -332,10 +345,12 @@ namespace eft_dma_radar.Tarkov.EFTPlayer.Plugins
                         fireType = fireMode.GetDescription();
                 }
 
-                try // does nothing, only exists for the catch to happen
+                // Try to resolve ammo name from the chambered round.
+                // Counts are accumulated below regardless of this path.
+                try
                 {
                     var chambers = Memory.ReadPtr(hands.ItemAddr + Offsets.LootItemWeapon.Chambers);
-                    var slotPtr = Memory.ReadPtr(chambers + MemList<byte>.ArrStartOffset + 0 * 0x8); // One in the chamber ;)
+                    var slotPtr = Memory.ReadPtr(chambers + MemList<byte>.ArrStartOffset + 0 * 0x8);
                     var slotItem = Memory.ReadPtr(slotPtr + Offsets.Slot.ContainedItem);
                     var ammoTemplate = Memory.ReadPtr(slotItem + Offsets.LootItem.Template);
                     var idPtr = Memory.ReadValue<Types.MongoID>(ammoTemplate + Offsets.ItemTemplate._id);
@@ -345,23 +360,16 @@ namespace eft_dma_radar.Tarkov.EFTPlayer.Plugins
                 }
                 catch
                 {
-                    var ammoTemplate_ = GetAmmoTemplateFromWeapon(hands.ItemAddr);
-                    var ammoIdPtr = Memory.ReadValue<Types.MongoID>(ammoTemplate_ + Offsets.ItemTemplate._id);
-                    string ammoId = Memory.ReadUnityString(ammoIdPtr.StringID);
-                    if (EftDataManager.AllItems.TryGetValue(ammoId, out var ammo))
-                        ammoFromMag = ammo?.ShortName;
-                    var magItemPtr = Memory.ReadPtr(magSlotPtr + Offsets.Slot.ContainedItem);
-                    var cartridges = Memory.ReadPtr(magItemPtr + Offsets.LootItemMagazine.Cartridges);
-                    var magStackPtr = Memory.ReadPtr(cartridges + Offsets.StackSlot._items);
-                    var magStack = MemList<ulong>.Get(magStackPtr);
-                    maxCount += Memory.ReadValue<int>(cartridges + Offsets.StackSlot.MaxCount);
-                    var magStackPtr_ = Memory.ReadPtr(cartridges + Offsets.StackSlot._items);
-                    using var magStack_ = MemList<ulong>.Get(magStackPtr);
-                    foreach (var stack in magStack_) // Each ammo type will be a separate stack
+                    // No round in chamber – try to get ammo name from the magazine stack instead.
+                    try
                     {
-                        if (stack != 0x0)
-                            currentCount += Memory.ReadValue<int>(stack + Offsets.MagazineClass.StackObjectsCount, false);
+                        var ammoTemplate_ = GetAmmoTemplateFromWeapon(hands.ItemAddr);
+                        var ammoIdPtr = Memory.ReadValue<Types.MongoID>(ammoTemplate_ + Offsets.ItemTemplate._id);
+                        string ammoId = Memory.ReadUnityString(ammoIdPtr.StringID);
+                        if (EftDataManager.AllItems.TryGetValue(ammoId, out var ammo))
+                            ammoFromMag = ammo?.ShortName;
                     }
+                    catch { }
                 }
 
                 var chambersPtr = Memory.ReadValue<ulong>(hands.ItemAddr + Offsets.LootItemWeapon.Chambers);
@@ -405,6 +413,11 @@ namespace eft_dma_radar.Tarkov.EFTPlayer.Plugins
                 _fireType = fireType;
                 Count = currentCount;
                 MaxCount = maxCount;
+
+                if (_ammo     != null) _lastValidAmmo     = _ammo;
+                if (_fireType != null) _lastValidFireType = _fireType;
+                if (currentCount > 0)  _lastValidCount    = currentCount;
+                if (maxCount     > 0)  _lastValidMaxCount = maxCount;
             }
 
             /// <summary>
