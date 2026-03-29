@@ -333,6 +333,22 @@ namespace eft_dma_radar.Tarkov.Hideout
         /// hideout area from memory via HideoutController._areas.
         /// Uses scatter reads to minimise the number of DMA round-trips.
         /// Results are stored in <see cref="Areas"/>.
+        /// Round map (13 total):
+        ///   1  – dictPtr (sequential)
+        ///   2  – count + entriesPtr
+        ///   3  – areaType + areaPtr per entry
+        ///   4  – dataPtr + arrayPtr per area            [merged, was R4+R6]
+        ///   5  – level + status per area
+        ///   6  – arrayCount + levelObjPtr per upgradeable area
+        ///   7  – stagePtr per valid area
+        ///   seq– listPtr via ReadPtrChain(stage→relReq→list) [replaces R9+R10]
+        ///   8  – reqCount + itemsArrPtr per area
+        ///   9  – reqPtr per flat requirement
+        ///   10 – fulfilled + vtablePtr per requirement
+        ///   11 – namePtr per requirement
+        ///   seq– class name reads (cached UTF-8, ~10 unique types)
+        ///   12 – type-specific fields (multi-index)
+        ///   13 – UnicodeString fields
         /// </summary>
         public void ReadAreas()
         {
@@ -379,16 +395,25 @@ namespace eft_dma_radar.Tarkov.Hideout
                     }
                 }
 
-                // ── Round 4 – per-area: dataPtr ───────────────────────────────────────────
-                var dataPtrs = new ulong[count];
+                // ── Round 4 – per-area: dataPtr + arrayPtr (_areaLevels) [merged R4+R6] ───
+                // Both fields live on areaPtrs[i] and neither depends on the other,
+                // so they are read in a single DMA round, saving one full round-trip.
+                var dataPtrs  = new ulong[count];
+                var arrayPtrs = new ulong[count];
                 using (var r4 = ScatterReadRound.Get(false))
                 {
                     for (int i = 0; i < count; i++)
-                        if (areaPtrs[i].IsValidVirtualAddress())
-                            r4[0].AddEntry<ulong>(i, areaPtrs[i] + OffAreaData);
+                    {
+                        if (!areaPtrs[i].IsValidVirtualAddress()) continue;
+                        r4[0].AddEntry<ulong>(i, areaPtrs[i] + OffAreaData);
+                        r4[1].AddEntry<ulong>(i, areaPtrs[i] + OffAreaLevels);
+                    }
                     r4.Run();
                     for (int i = 0; i < count; i++)
+                    {
                         r4[0].TryGetResult(i, out dataPtrs[i]);
+                        r4[1].TryGetResult(i, out arrayPtrs[i]);
+                    }
                 }
 
                 // ── Round 5 – per-area: level + status ────────────────────────────────────
@@ -416,36 +441,26 @@ namespace eft_dma_radar.Tarkov.Hideout
                              && (EAreaStatus)statuses[i] != EAreaStatus.NoFutureUpgrades)
                     .ToList();
 
-                // ── Round 6 – upgradeable areas: arrayPtr (_areaLevels) ───────────────────
-                var arrayPtrs = new ulong[count];
-                using (var r6 = ScatterReadRound.Get(false))
-                {
-                    foreach (var i in upgIdx)
-                        r6[0].AddEntry<ulong>(i, areaPtrs[i] + OffAreaLevels);
-                    r6.Run();
-                    foreach (var i in upgIdx)
-                        r6[0].TryGetResult(i, out arrayPtrs[i]);
-                }
-
-                // ── Round 7 – arrayCount + levelObjPtr per upgradeable area ───────────────
+                // ── Round 6 – arrayCount + levelObjPtr per upgradeable area ───────────────
+                // (arrayPtrs already populated in Round 4 for all areas)
                 var arrayCounts  = new int[count];
                 var levelObjPtrs = new ulong[count];
-                using (var r7 = ScatterReadRound.Get(false))
+                using (var r6 = ScatterReadRound.Get(false))
                 {
                     foreach (var i in upgIdx)
                     {
                         if (!arrayPtrs[i].IsValidVirtualAddress()) continue;
                         var targetIdx = levels[i] + 1;
-                        r7[0].AddEntry<int>(i, arrayPtrs[i] + MemArray<ulong>.CountOffset);
-                        r7[1].AddEntry<ulong>(i,
+                        r6[0].AddEntry<int>(i, arrayPtrs[i] + MemArray<ulong>.CountOffset);
+                        r6[1].AddEntry<ulong>(i,
                             arrayPtrs[i] + MemArray<ulong>.ArrBaseOffset
                             + (ulong)(targetIdx * (int)UnityOffsets.ManagedArray.ElementSize));
                     }
-                    r7.Run();
+                    r6.Run();
                     foreach (var i in upgIdx)
                     {
-                        r7[0].TryGetResult(i, out arrayCounts[i]);
-                        r7[1].TryGetResult(i, out levelObjPtrs[i]);
+                        r6[0].TryGetResult(i, out arrayCounts[i]);
+                        r6[1].TryGetResult(i, out levelObjPtrs[i]);
                     }
                 }
 
@@ -454,42 +469,34 @@ namespace eft_dma_radar.Tarkov.Hideout
                              && arrayCounts[i] > levels[i] + 1)
                     .ToList();
 
-                // ── Round 8 – stagePtr per valid area ──────────────────────────────────────
+                // ── Round 7 – stagePtr per valid area ──────────────────────────────────────
                 var stagePtrs = new ulong[count];
-                using (var r8 = ScatterReadRound.Get(false))
+                using (var r7 = ScatterReadRound.Get(false))
                 {
                     foreach (var i in validUpgIdx)
-                        r8[0].AddEntry<ulong>(i, levelObjPtrs[i] + OffStage);
-                    r8.Run();
+                        r7[0].AddEntry<ulong>(i, levelObjPtrs[i] + OffStage);
+                    r7.Run();
                     foreach (var i in validUpgIdx)
-                        r8[0].TryGetResult(i, out stagePtrs[i]);
+                        r7[0].TryGetResult(i, out stagePtrs[i]);
                 }
 
-                // ── Round 9 – relReqPtr ────────────────────────────────────────────────────
-                var relReqPtrs = new ulong[count];
-                using (var r9 = ScatterReadRound.Get(false))
-                {
-                    foreach (var i in validUpgIdx)
-                        if (stagePtrs[i].IsValidVirtualAddress())
-                            r9[0].AddEntry<ulong>(i, stagePtrs[i] + OffRequirements);
-                    r9.Run();
-                    foreach (var i in validUpgIdx)
-                        r9[0].TryGetResult(i, out relReqPtrs[i]);
-                }
-
-                // ── Round 10 – listPtr ─────────────────────────────────────────────────────
+                // ── Sequential ptr-chain: stagePtr → relReqPtr → listPtr ──────────────────
+                // Each hop is a single pointer dereference with no parallelism across hops,
+                // so ReadPtrChain is equivalent to two sequential scatter rounds but avoids
+                // the per-round VmmScatter setup overhead for this small set of areas.
                 var listPtrs = new ulong[count];
-                using (var r10 = ScatterReadRound.Get(false))
+                foreach (var i in validUpgIdx)
                 {
-                    foreach (var i in validUpgIdx)
-                        if (relReqPtrs[i].IsValidVirtualAddress())
-                            r10[0].AddEntry<ulong>(i, relReqPtrs[i] + OffRelData);
-                    r10.Run();
-                    foreach (var i in validUpgIdx)
-                        r10[0].TryGetResult(i, out listPtrs[i]);
+                    if (!stagePtrs[i].IsValidVirtualAddress()) continue;
+                    try
+                    {
+                        listPtrs[i] = Memory.ReadPtrChain(stagePtrs[i],
+                            [OffRequirements, OffRelData], useCache: false);
+                    }
+                    catch { /* leave as 0 — handled below */ }
                 }
 
-                // ── Round 11 – reqCount + itemsArrPtr per area ─────────────────────────────
+                // ── Round 8 – reqCount + itemsArrPtr per area ──────────────────────────────
                 var reqCounts    = new int[count];
                 var itemsArrPtrs = new ulong[count];
                 using (var r11 = ScatterReadRound.Get(false))
@@ -524,46 +531,46 @@ namespace eft_dma_radar.Tarkov.Hideout
                 var vtablePtrs = new ulong[flat];
                 var namePtrs   = new ulong[flat];
 
-                // ── Round 12 – reqPtr per flat requirement ─────────────────────────────────
-                using (var r12 = ScatterReadRound.Get(false))
+                // ── Round 9 – reqPtr per flat requirement ──────────────────────────────────────
+                using (var r9 = ScatterReadRound.Get(false))
                 {
                     for (int k = 0; k < flat; k++)
                     {
                         var (ai, slot) = flatMap[k];
                         var dataStart  = itemsArrPtrs[ai] + MemList<ulong>.ArrStartOffset;
-                        r12[0].AddEntry<ulong>(k, dataStart + (ulong)(slot * (int)UnityOffsets.ManagedArray.ElementSize));
+                        r9[0].AddEntry<ulong>(k, dataStart + (ulong)(slot * (int)UnityOffsets.ManagedArray.ElementSize));
                     }
-                    r12.Run();
+                    r9.Run();
                     for (int k = 0; k < flat; k++)
-                        r12[0].TryGetResult(k, out reqPtrs[k]);
+                        r9[0].TryGetResult(k, out reqPtrs[k]);
                 }
 
-                // ── Round 13 – fulfilled + vtablePtr ──────────────────────────────────────
-                using (var r13 = ScatterReadRound.Get(false))
+                // ── Round 10 – fulfilled + vtablePtr ──────────────────────────────────────────
+                using (var r10 = ScatterReadRound.Get(false))
                 {
                     for (int k = 0; k < flat; k++)
                         if (reqPtrs[k].IsValidVirtualAddress())
                         {
-                            r13[0].AddEntry<bool>(k, reqPtrs[k] + OffReqFulfilled);
-                            r13[1].AddEntry<ulong>(k, reqPtrs[k]);  // vtable is at +0x0
+                            r10[0].AddEntry<bool>(k, reqPtrs[k] + OffReqFulfilled);
+                            r10[1].AddEntry<ulong>(k, reqPtrs[k]);  // vtable is at +0x0
                         }
-                    r13.Run();
+                    r10.Run();
                     for (int k = 0; k < flat; k++)
                     {
-                        r13[0].TryGetResult(k, out fulfilled[k]);
-                        r13[1].TryGetResult(k, out vtablePtrs[k]);
+                        r10[0].TryGetResult(k, out fulfilled[k]);
+                        r10[1].TryGetResult(k, out vtablePtrs[k]);
                     }
                 }
 
-                // ── Round 14 – namePtr (vtable + 0x10) ────────────────────────────────────
-                using (var r14 = ScatterReadRound.Get(false))
+                // ── Round 11 – namePtr (vtable + 0x10) ────────────────────────────────────────
+                using (var r11 = ScatterReadRound.Get(false))
                 {
                     for (int k = 0; k < flat; k++)
                         if (vtablePtrs[k].IsValidVirtualAddress())
-                            r14[0].AddEntry<ulong>(k, vtablePtrs[k] + 0x10);
-                    r14.Run();
+                            r11[0].AddEntry<ulong>(k, vtablePtrs[k] + 0x10);
+                    r11.Run();
                     for (int k = 0; k < flat; k++)
-                        r14[0].TryGetResult(k, out namePtrs[k]);
+                        r11[0].TryGetResult(k, out namePtrs[k]);
                 }
 
                 // Sequential class name reads — UTF-8 C strings, cached, ~10 unique types
@@ -572,7 +579,7 @@ namespace eft_dma_radar.Tarkov.Hideout
                     if (namePtrs[k].IsValidVirtualAddress())
                         classNames[k] = Memory.ReadString(namePtrs[k], 64, useCache: true);
 
-                // ── Round 15 – type-specific fields (multi-index) ─────────────────────────
+                // ── Round 12 – type-specific fields (multi-index) ─────────────────────────
                 // r[0] = field @ 0x48 (ptr: tplId / traderId)
                 // r[1] = baseCount @ 0x5C (int: Item/Tool)
                 // r[2] = userCount @ 0x54 (int: Item/Tool)
@@ -588,7 +595,7 @@ namespace eft_dma_radar.Tarkov.Hideout
                 var skillNamePtrs = new ulong[flat];
                 var intAt40       = new int[flat];
 
-                using (var r15 = ScatterReadRound.Get(false))
+                using (var r12 = ScatterReadRound.Get(false))
                 {
                     for (int k = 0; k < flat; k++)
                     {
@@ -598,47 +605,47 @@ namespace eft_dma_radar.Tarkov.Hideout
                         if (cn.Contains("Item", StringComparison.OrdinalIgnoreCase)
                          || cn.Contains("Tool", StringComparison.OrdinalIgnoreCase))
                         {
-                            r15[0].AddEntry<ulong>(k, reqPtrs[k] + 0x48);
-                            r15[1].AddEntry<int>(k, reqPtrs[k] + OffReqBaseCount);
-                            r15[2].AddEntry<int>(k, reqPtrs[k] + OffReqUserCount);
+                            r12[0].AddEntry<ulong>(k, reqPtrs[k] + 0x48);
+                            r12[1].AddEntry<int>(k, reqPtrs[k] + OffReqBaseCount);
+                            r12[2].AddEntry<int>(k, reqPtrs[k] + OffReqUserCount);
                         }
                         else if (cn.Contains("Area", StringComparison.OrdinalIgnoreCase))
                         {
-                            r15[3].AddEntry<int>(k, reqPtrs[k] + 0x38);
-                            r15[4].AddEntry<int>(k, reqPtrs[k] + 0x3C);
+                            r12[3].AddEntry<int>(k, reqPtrs[k] + 0x38);
+                            r12[4].AddEntry<int>(k, reqPtrs[k] + 0x3C);
                         }
                         else if (cn.Contains("Skill", StringComparison.OrdinalIgnoreCase))
                         {
-                            r15[5].AddEntry<ulong>(k, reqPtrs[k] + 0x38);
-                            r15[6].AddEntry<int>(k, reqPtrs[k] + 0x40);
+                            r12[5].AddEntry<ulong>(k, reqPtrs[k] + 0x38);
+                            r12[6].AddEntry<int>(k, reqPtrs[k] + 0x40);
                         }
                         else if (cn.Contains("Loyalty", StringComparison.OrdinalIgnoreCase))
                         {
-                            r15[0].AddEntry<ulong>(k, reqPtrs[k] + 0x48); // traderId ptr
-                            r15[6].AddEntry<int>(k, reqPtrs[k] + 0x40);   // loyaltyLevel
+                            r12[0].AddEntry<ulong>(k, reqPtrs[k] + 0x48); // traderId ptr
+                            r12[6].AddEntry<int>(k, reqPtrs[k] + 0x40);   // loyaltyLevel
                         }
                     }
-                    r15.Run();
+                    r12.Run();
                     for (int k = 0; k < flat; k++)
                     {
-                        r15[0].TryGetResult(k, out field48Ptrs[k]);
-                        r15[1].TryGetResult(k, out baseCounts[k]);
-                        r15[2].TryGetResult(k, out userCounts[k]);
-                        r15[3].TryGetResult(k, out areaTypeVals[k]);
-                        r15[4].TryGetResult(k, out reqLevels[k]);
-                        r15[5].TryGetResult(k, out skillNamePtrs[k]);
-                        r15[6].TryGetResult(k, out intAt40[k]);
+                        r12[0].TryGetResult(k, out field48Ptrs[k]);
+                        r12[1].TryGetResult(k, out baseCounts[k]);
+                        r12[2].TryGetResult(k, out userCounts[k]);
+                        r12[3].TryGetResult(k, out areaTypeVals[k]);
+                        r12[4].TryGetResult(k, out reqLevels[k]);
+                        r12[5].TryGetResult(k, out skillNamePtrs[k]);
+                        r12[6].TryGetResult(k, out intAt40[k]);
                     }
                 }
 
-                // ── Round 16 – UnicodeString scatter for string fields ─────────────────────
+                // ── Round 13 – UnicodeString scatter for string fields ────────────────────
                 // r[0] = field48 (tplId for Item/Tool, traderId for Loyalty) at ptr + 0x14
                 // r[1] = skillName at ptr + 0x14
                 const int StringCB = 128;
                 var tplOrTraderIds = new string[flat];
                 var skillNames     = new string[flat];
 
-                using (var r16 = ScatterReadRound.Get(false))
+                using (var r13 = ScatterReadRound.Get(false))
                 {
                     for (int k = 0; k < flat; k++)
                     {
@@ -650,19 +657,19 @@ namespace eft_dma_radar.Tarkov.Hideout
                           || cn.Contains("Loyalty", StringComparison.OrdinalIgnoreCase))
                          && field48Ptrs[k].IsValidVirtualAddress())
                         {
-                            r16[0].AddEntry<UnicodeString>(k, field48Ptrs[k] + 0x14, StringCB);
+                            r13[0].AddEntry<UnicodeString>(k, field48Ptrs[k] + 0x14, StringCB);
                         }
                         else if (cn.Contains("Skill", StringComparison.OrdinalIgnoreCase)
                               && skillNamePtrs[k].IsValidVirtualAddress())
                         {
-                            r16[1].AddEntry<UnicodeString>(k, skillNamePtrs[k] + 0x14, StringCB);
+                            r13[1].AddEntry<UnicodeString>(k, skillNamePtrs[k] + 0x14, StringCB);
                         }
                     }
-                    r16.Run();
+                    r13.Run();
                     for (int k = 0; k < flat; k++)
                     {
-                        if (r16[0].TryGetResult<UnicodeString>(k, out var s0)) tplOrTraderIds[k] = s0;
-                        if (r16[1].TryGetResult<UnicodeString>(k, out var s1)) skillNames[k]     = s1;
+                        if (r13[0].TryGetResult<UnicodeString>(k, out var s0)) tplOrTraderIds[k] = s0;
+                        if (r13[1].TryGetResult<UnicodeString>(k, out var s1)) skillNames[k]     = s1;
                     }
                 }
 
