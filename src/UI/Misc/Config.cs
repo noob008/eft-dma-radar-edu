@@ -357,8 +357,6 @@ namespace eft_dma_radar.UI.Misc
         public LowLevelCache LowLevelCache => this.Cache.LowLevel;
         [JsonIgnore]
         public ChamsConfig ChamsConfig => this.MemWrites.Chams;
-        [JsonIgnore]
-        public bool AdvancedMemWrites => this.MemWrites.AdvancedMemWrites;
         #endregion
 
         /// <summary>
@@ -2164,11 +2162,6 @@ namespace eft_dma_radar.UI.Misc
 
     public sealed class MemWritesConfig
     {
-        /// <summary>
-        /// Keep always off, left for Chams compatibility.
-        /// </summary>
-        [JsonPropertyName("advancedMemWritesRisky")]
-        public bool AdvancedMemWrites { get; set; } = false;
         /// <summary>
         /// Enables DMA Memory Writing
         /// </summary>

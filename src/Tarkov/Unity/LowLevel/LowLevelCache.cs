@@ -11,23 +11,11 @@ namespace eft_dma_radar.Common.Unity.LowLevel
         [JsonPropertyName("ZK8MQLY")]
         public uint PID { get; set; }
 
-        [JsonPropertyName("X8kP9Ln")]
-        public ulong CodeCave { get; set; }
-
         [JsonPropertyName("tZ6Yv7m")]
         public ulong UnityPlayerDll { get; set; }
 
         [JsonPropertyName("K9XrF2q")]
         public ulong MonoDll { get; set; }
-
-        [JsonPropertyName("XJ9TQWZ")]
-        public ulong HookedMonoFuncAddress { get; set; }
-
-        [JsonPropertyName("PL6VDRM")]
-        public ulong HookedMonoFunc { get; set; }
-
-        [JsonPropertyName("L3Wp7Tz")]
-        public ConcurrentDictionary<int, CachedChamsMaterial> ChamsMaterialCache { get; set; } = new();
 
         [JsonPropertyName("lootChamsCache")]
         public ConcurrentDictionary<string, CachedLootMaterial> LootChamsCache { get; private set; } = new();
@@ -45,21 +33,11 @@ namespace eft_dma_radar.Common.Unity.LowLevel
         /// </summary>
         public void Reset()
         {
-            CodeCave = default;
             UnityPlayerDll = default;
             MonoDll = default;
-            HookedMonoFuncAddress = default;
-            HookedMonoFunc = default;
-            ChamsMaterialCache.Clear();
             LootChamsCache.Clear();
             PlayerChamsCache.Clear();
         }
-    }
-
-    public class CachedChamsMaterial
-    {
-        public int InstanceID { get; set; }
-        public ulong Address { get; set; }
     }
 
     public sealed class CachedLootMaterial

@@ -323,8 +323,6 @@ namespace eft_dma_radar.UI.Pages
 
             // Global Settings
             chkMasterSwitch.IsChecked = cfg.MemWritesEnabled;
-            //chkAdvancedWrites.IsChecked = cfg.AdvancedMemWrites;
-            //chkAntiPage.IsChecked = cfg.AntiPage;
 
             // Aimbot Settings
             LoadAimbotOptions();
@@ -749,7 +747,7 @@ namespace eft_dma_radar.UI.Pages
                     case "MemWritesEnabled":
                         if (value && !MemWrites.Config.MemWritesEnabled)
                         {
-                            shouldProceed = ConfirmMemoryWritingEnable(false);
+                            shouldProceed = ConfirmMemoryWritingEnable();
                             if (!shouldProceed)
                             {
                                 Dispatcher.BeginInvoke(new Action(() =>
@@ -1235,83 +1233,34 @@ namespace eft_dma_radar.UI.Pages
             {
                 DisableAll,
                 EnableBasicOnly,
-                EnableAll,
                 KeepCurrent
             }
 
             /// <summary>
             /// Shows memory writing confirmation dialogs from the Memory Writing panel
             /// </summary>
-            public static MemoryWritingDecision ShowMemoryWritingConfirmation(bool hasBasicMemWrites, bool hasAdvancedMemWrites)
+            public static MemoryWritingDecision ShowMemoryWritingConfirmation(bool hasBasicMemWrites)
             {
                 return Application.Current.Dispatcher.Invoke(() =>
                 {
                     if (!hasBasicMemWrites)
                         return MemoryWritingDecision.KeepCurrent;
 
-                    if (hasAdvancedMemWrites)
-                    {
-                        var advancedResult = MessageBox.Show(
-                            "⚠️ ADVANCED MEMORY WRITING DETECTED ⚠️\n\n" +
-                            "The configuration you're importing has Advanced Memory Writing features enabled.\n\n" +
-                            "Advanced features include things such as:\n" +
-                            "• Shellcode injection\n" +
-                            "• Advanced chams (vischeck)\n" +
-                            "• FOV changer\n" +
-                            "• Disable Screen Effects (eg flash bangs etc)\n" +
-                            "• Streamer Mode\n\n" +
-                            "⚠️ WARNING: These features may carry a higher detection risk!\n\n" +
-                            "Do you want to enable Advanced Memory Writing features?",
-                            "Advanced Memory Writing Configuration",
-                            MessageBoxButton.YesNo,
-                            MessageBoxImage.Warning);
+                    var basicResult = MessageBox.Show(
+                        "⚠️ MEMORY WRITING DETECTED ⚠️\n\n" +
+                        "The configuration you're importing has Memory Writing features enabled.\n\n" +
+                        "Memory writing features include:\n" +
+                        "• Aimbot, No Recoil, Infinite Stamina\n" +
+                        "• Movement modifications (Speed, No Inertia, etc.)\n" +
+                        "• Visual modifications (Night Vision, etc.)\n" +
+                        "• And other game modifications\n\n" +
+                        "⚠️ WARNING: These features carry increased detection risk!\n\n" +
+                        "Do you want to enable Memory Writing features?",
+                        "Memory Writing Configuration",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Warning);
 
-                        if (advancedResult == MessageBoxResult.Yes)
-                        {
-                            return MemoryWritingDecision.EnableAll;
-                        }
-                        else if (hasBasicMemWrites)
-                        {
-                            var basicResult = MessageBox.Show(
-                                "Advanced Memory Writing has been disabled.\n\n" +
-                                "However, this configuration also contains Basic Memory Writing features:\n\n" +
-                                "• Aimbot, No Recoil, Infinite Stamina\n" +
-                                "• Movement modifications (Speed, No Inertia, etc.)\n" +
-                                "• Visual modifications (Night Vision, etc.)\n" +
-                                "• And other game modifications\n\n" +
-                                "⚠️ WARNING: These features still carry detection risk!\n\n" +
-                                "Do you want to enable Basic Memory Writing features?",
-                                "Basic Memory Writing Configuration",
-                                MessageBoxButton.YesNo,
-                                MessageBoxImage.Warning);
-
-                            return basicResult == MessageBoxResult.Yes ? MemoryWritingDecision.EnableBasicOnly : MemoryWritingDecision.DisableAll;
-                        }
-                        else
-                        {
-                            return MemoryWritingDecision.DisableAll;
-                        }
-                    }
-                    else if (hasBasicMemWrites)
-                    {
-                        var basicResult = MessageBox.Show(
-                            "⚠️ MEMORY WRITING DETECTED ⚠️\n\n" +
-                            "The configuration you're importing has Memory Writing features enabled.\n\n" +
-                            "Memory writing features include:\n" +
-                            "• Aimbot, No Recoil, Infinite Stamina\n" +
-                            "• Movement modifications (Speed, No Inertia, etc.)\n" +
-                            "• Visual modifications (Night Vision, etc.)\n" +
-                            "• And other game modifications\n\n" +
-                            "⚠️ WARNING: These features carry increased detection risk!\n\n" +
-                            "Do you want to enable Memory Writing features?",
-                            "Memory Writing Configuration",
-                            MessageBoxButton.YesNo,
-                            MessageBoxImage.Warning);
-
-                        return basicResult == MessageBoxResult.Yes ? MemoryWritingDecision.EnableBasicOnly : MemoryWritingDecision.DisableAll;
-                    }
-
-                    return MemoryWritingDecision.KeepCurrent;
+                    return basicResult == MessageBoxResult.Yes ? MemoryWritingDecision.EnableBasicOnly : MemoryWritingDecision.DisableAll;
                 });
             }
 
@@ -1324,23 +1273,14 @@ namespace eft_dma_radar.UI.Pages
                 {
                     case MemoryWritingDecision.DisableAll:
                         importedConfig.MemWrites.MemWritesEnabled = false;
-                        //importedConfig.MemWrites.AdvancedMemWrites = false;
                         XMLogging.WriteLine("[Config] User chose to disable all Memory Writing features during import");
                         NotificationsShared.Info("[Config] All Memory Writing features have been disabled. You can enable them later in the Memory Writing panel if needed.");
                         break;
 
                     case MemoryWritingDecision.EnableBasicOnly:
                         importedConfig.MemWrites.MemWritesEnabled = true;
-                        //importedConfig.MemWrites.AdvancedMemWrites = false;
-                        XMLogging.WriteLine("[Config] User chose to enable Basic Memory Writing features only during import");
-                        NotificationsShared.Warning("[Config] Basic Memory Writing features are enabled. Advanced features have been disabled. Please be aware of the associated risks.");
-                        break;
-
-                    case MemoryWritingDecision.EnableAll:
-                        importedConfig.MemWrites.MemWritesEnabled = true;
-                        //importedConfig.MemWrites.AdvancedMemWrites = true;
-                        XMLogging.WriteLine("[Config] User chose to keep all Memory Writing features enabled during import");
-                        NotificationsShared.Warning("[Config] All Memory Writing features including Advanced features are enabled. Please be aware of the significant risks associated with these features.");
+                        XMLogging.WriteLine("[Config] User chose to enable Memory Writing features during import");
+                        NotificationsShared.Warning("[Config] Memory Writing features are enabled. Please be aware of the associated risks.");
                         break;
 
                     case MemoryWritingDecision.KeepCurrent:
@@ -1355,55 +1295,32 @@ namespace eft_dma_radar.UI.Pages
         public static MemoryWritingImportHandler.MemoryWritingDecision HandleConfigImportMemoryWriting(Config importedConfig)
         {
             var hasBasicMemWrites = importedConfig.MemWrites.MemWritesEnabled;
-            //var hasAdvancedMemWrites = importedConfig.MemWrites.AdvancedMemWrites;
 
-            return MemoryWritingImportHandler.ShowMemoryWritingConfirmation(hasBasicMemWrites, false);
+            return MemoryWritingImportHandler.ShowMemoryWritingConfirmation(hasBasicMemWrites);
         }
 
         /// <summary>
         /// Shows confirmation when user manually enables memory writing features
         /// </summary>
-        public bool ConfirmMemoryWritingEnable(bool isAdvanced = false)
+        public bool ConfirmMemoryWritingEnable()
         {
             return Dispatcher.Invoke(() =>
             {
-                if (isAdvanced)
-                {
-                    var result = MessageBox.Show(
-                        "⚠️ ENABLING ADVANCED MEMORY WRITING ⚠️\n\n" +
-                        "You are about to enable Advanced Memory Writing features.\n\n" +
-                        "Advanced features include things such as:\n" +
-                        "• Shellcode injection\n" +
-                        "• Advanced chams (vischeck)\n" +
-                        "• FOV changer\n" +
-                        "• Disable Screen Effects (eg flash bangs etc)\n" +
-                        "• Streamer Mode\n\n" +
-                        "⚠️ WARNING: These features may carry a higher detection risk!\n\n" +
-                        "Are you sure you want to enable Advanced Memory Writing?",
-                        "Advanced Memory Writing Warning",
-                        MessageBoxButton.YesNo,
-                        MessageBoxImage.Warning);
+                var result = MessageBox.Show(
+                    "⚠️ ENABLING MEMORY WRITING ⚠️\n\n" +
+                    "You are about to enable Memory Writing features.\n\n" +
+                    "Memory writing features include:\n" +
+                    "• Aimbot, No Recoil, Infinite Stamina\n" +
+                    "• Movement modifications (Speed, No Inertia, etc.)\n" +
+                    "• Visual modifications (Night Vision, etc.)\n" +
+                    "• And other game modifications\n\n" +
+                    "⚠️ WARNING: These features carry increased detection risk!\n\n" +
+                    "Are you sure you want to enable Memory Writing?",
+                    "Memory Writing Warning",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning);
 
-                    return result == MessageBoxResult.Yes;
-                }
-                else
-                {
-                    var result = MessageBox.Show(
-                        "⚠️ ENABLING MEMORY WRITING ⚠️\n\n" +
-                        "You are about to enable Memory Writing features.\n\n" +
-                        "Memory writing features include:\n" +
-                        "• Aimbot, No Recoil, Infinite Stamina\n" +
-                        "• Movement modifications (Speed, No Inertia, etc.)\n" +
-                        "• Visual modifications (Night Vision, etc.)\n" +
-                        "• And other game modifications\n\n" +
-                        "⚠️ WARNING: These features carry increased detection risk!\n\n" +
-                        "Are you sure you want to enable Memory Writing?",
-                        "Memory Writing Warning",
-                        MessageBoxButton.YesNo,
-                        MessageBoxImage.Warning);
-
-                    return result == MessageBoxResult.Yes;
-                }
+                return result == MessageBoxResult.Yes;
             });
         }
         #endregion

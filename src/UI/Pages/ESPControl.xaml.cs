@@ -280,7 +280,6 @@ namespace eft_dma_radar.UI.Pages
             SetSelectedEntityType();
             UpdateEntityChamsSettings();
             UpdateChamsMaterialStatus();
-            UpdateAdvancedMemWritesWarning();
         }
 
         private void RegisterChamsEvents()
@@ -359,7 +358,6 @@ namespace eft_dma_radar.UI.Pages
 
                 UpdateColorMaterialTypeSelection();
                 UpdateColorSettings();
-                ValidateAdvancedModes(chams);
                 RefreshControlStates();
             }
             catch (Exception ex)
@@ -428,24 +426,21 @@ namespace eft_dma_radar.UI.Pages
         {
             ToggleChamsControls();
             ToggleEntityChamsControls();
-            ToggleMaterialTypeControls();
         }
 
         private void ToggleChamsControls()
         {
             var memWrites = MemWrites.Enabled;
-            var advMemWrites = MemWrites.Config.AdvancedMemWrites;
             var controlEnabled = memWrites && Config.ChamsConfig.Enabled;
 
             chkEnableChams.IsEnabled = memWrites;
             chkEntityEnabled.IsEnabled = controlEnabled;
             cboChamsEntityType.IsEnabled = controlEnabled;
 
-            btnRefreshChamsMaterials.IsEnabled = controlEnabled && advMemWrites && !_isRefreshingChamsMaterials;
-            btnClearChamsCache.IsEnabled = controlEnabled && advMemWrites && !_isRefreshingChamsMaterials;
+            btnRefreshChamsMaterials.IsEnabled = controlEnabled && !_isRefreshingChamsMaterials;
+            btnClearChamsCache.IsEnabled = controlEnabled && !_isRefreshingChamsMaterials;
 
             ToggleChamsColorControls();
-            UpdateAdvancedMemWritesWarning();
         }
 
         private void ToggleChamsColorControls()
@@ -462,7 +457,6 @@ namespace eft_dma_radar.UI.Pages
         private void ToggleEntityChamsControls()
         {
             var entityEnabled = chkEntityEnabled.IsChecked == true;
-            var advWrites = MemWrites.Config.AdvancedMemWrites;
             var baseEnabled = MemWrites.Enabled && Config.ChamsConfig.Enabled;
             var finalEnabled = baseEnabled && entityEnabled;
 
@@ -493,79 +487,8 @@ namespace eft_dma_radar.UI.Pages
             cboDeathMaterialType.IsEnabled = baseEnabled && (chkDeathMaterialEnabled.IsChecked == true);
         }
 
-        private void ToggleMaterialTypeControls()
-        {
-            var advWrites = Config.MemWrites.AdvancedMemWrites;
-
-            var combos = IsPlayerEntityType()
-                ? new[] { cboClothingMaterialType, cboGearMaterialType, cboDeathMaterialType }
-                : new[] { cboMaterialType };
-
-            foreach (var combo in combos)
-                ToggleAdvancedModeItems(combo, advWrites);
-        }
-
-        private void ToggleAdvancedModeItems(ComboBox combo, bool advancedEnabled)
-        {
-            foreach (ComboBoxItem item in combo.Items)
-            {
-                if (item.Tag is string tag)
-                {
-                    var isAdvanced = tag is "WireFrame" or "VisCheckGlow" or "VisCheckFlat";
-                    item.IsEnabled = !isAdvanced || advancedEnabled;
-                }
-            }
-        }
-
-        private void ValidateAdvancedModes(ChamsConfig.EntityChamsSettings chams)
-        {
-            var enabled = Config.ChamsConfig.Enabled && MemWrites.Enabled;
-            var advWrites = Config.MemWrites.AdvancedMemWrites;
-
-            if (!enabled || advWrites) return;
-
-            bool changed = false;
-            var entityType = _selectedEntityType;
-
-            if (IsPlayerEntityType())
-            {
-                if (RequiresModeValidation(chams.ClothingChamsMode))
-                {
-                    chams.ClothingChamsMode = ChamsMode.Basic;
-                    changed = true;
-                    XMLogging.WriteLine($"[CHAMS] Forcing {entityType} clothing mode to Basic due to AdvancedMemWrites being off");
-                }
-
-                if (RequiresModeValidation(chams.GearChamsMode))
-                {
-                    chams.GearChamsMode = ChamsMode.Basic;
-                    changed = true;
-                    XMLogging.WriteLine($"[CHAMS] Forcing {entityType} gear mode to Basic due to AdvancedMemWrites being off");
-                }
-
-                if (RequiresModeValidation(chams.DeathMaterialMode))
-                {
-                    chams.DeathMaterialMode = ChamsMode.Basic;
-                    changed = true;
-                    XMLogging.WriteLine($"[CHAMS] Forcing {entityType} death mode to Basic due to AdvancedMemWrites being off");
-                }
-            }
-            else if (RequiresModeValidation(chams.Mode))
-            {
-                chams.Mode = ChamsMode.Basic;
-                changed = true;
-                XMLogging.WriteLine($"[CHAMS] Forcing {entityType} mode to Basic due to AdvancedMemWrites being off");
-            }
-
-            if (changed) Config.Save();
-        }
-
-        private bool RequiresModeValidation(ChamsMode mode) =>
-            mode != ChamsMode.Basic && mode != ChamsMode.Visible;
-
         private void UpdateChamsMode(ChamsMode mode, string propertyName)
         {
-            if (!ValidateModeForAdvancedWrites(mode)) return;
 
             var chams = Config.ChamsConfig.GetEntitySettings(_selectedEntityType);
 
@@ -578,16 +501,6 @@ namespace eft_dma_radar.UI.Pages
             }
 
             Config.Save();
-        }
-
-        private bool ValidateModeForAdvancedWrites(ChamsMode mode)
-        {
-            var isAdvanced = Config.MemWrites.AdvancedMemWrites;
-            if (isAdvanced || mode == ChamsMode.Basic || mode == ChamsMode.Visible)
-                return true;
-
-            XMLogging.WriteLine($"[CHAMS] Attempted to set advanced mode {mode} while AdvancedMemWrites is off. Defaulting to Basic.");
-            return false;
         }
 
         private void ChamsColorButton_Clicked(object sender, RoutedEventArgs e)
@@ -740,49 +653,19 @@ namespace eft_dma_radar.UI.Pages
 
                 var unityColor = new UnityColor(color.R, color.G, color.B, color.A);
 
-                if (!Config.AdvancedMemWrites)
-                {
-                    if (Memory.Game is not LocalGameWorld game)
-                        return;
-
-                    var cm = game.CameraManager;
-                    var chams = Config.ChamsConfig.GetEntitySettings(_selectedEntityType);
-
-                    if (chams.Mode == ChamsMode.Visible)
-                    {
-                        var nvg = GameObjectManager.GetComponentFromBehaviour(cm.FPSCamera, "NightVision");
-                        if (nvg != 0)
-                        {
-                            var addr = nvg + 0x4C;
-                            Memory.WriteValue(addr, unityColor);
-                        }
-                    }
-
+                if (Memory.Game is not LocalGameWorld game)
                     return;
-                }
 
-                using var colorMem = new RemoteBytes(SizeChecker<UnityColor>.Size);
+                var cm = game.CameraManager;
+                var chams = Config.ChamsConfig.GetEntitySettings(_selectedEntityType);
 
-                foreach (var materialKvp in ChamsManager.Materials)
+                if (chams.Mode == ChamsMode.Visible)
                 {
-                    var (mode, entityType) = materialKvp.Key;
-                    var material = materialKvp.Value;
-
-                    if (entityType != _selectedEntityType || mode != specificMaterialMode || material.InstanceID == 0)
-                        continue;
-
-                    try
+                    var nvg = GameObjectManager.GetComponentFromBehaviour(cm.FPSCamera, "NightVision");
+                    if (nvg != 0)
                     {
-                        //if (isVisible)
-                        //    NativeMethods.SetMaterialColor(colorMem, material.Address, material.ColorVisible, unityColor);
-                        //else
-                        //    NativeMethods.SetMaterialColor(colorMem, material.Address, material.ColorInvisible, unityColor);
-
-                        XMLogging.WriteLine($"[CHAMS] Applied {(isVisible ? "visible" : "invisible")} color to {mode}/{entityType}");
-                    }
-                    catch (Exception ex)
-                    {
-                        XMLogging.WriteLine($"[CHAMS] Failed to apply color to {mode}/{entityType}: {ex.Message}");
+                        var addr = nvg + 0x4C;
+                        Memory.WriteValue(addr, unityColor);
                     }
                 }
             }
@@ -946,11 +829,10 @@ namespace eft_dma_radar.UI.Pages
 
         private void UpdateMaterialManagementButtons(ChamsMaterialStatus status)
         {
-            var advWrites = MemWrites.Config.AdvancedMemWrites;
             var controlEnabled = MemWrites.Enabled && Config.ChamsConfig.Enabled;
 
-            btnRefreshChamsMaterials.IsEnabled = controlEnabled && advWrites && !_isRefreshingChamsMaterials;
-            btnClearChamsCache.IsEnabled = controlEnabled && advWrites && !_isRefreshingChamsMaterials;
+            btnRefreshChamsMaterials.IsEnabled = controlEnabled && !_isRefreshingChamsMaterials;
+            btnClearChamsCache.IsEnabled = controlEnabled && !_isRefreshingChamsMaterials;
 
             var tooltip = status.MissingCombos.Any()
                 ? $"Refresh failed materials. Missing: {string.Join(", ", status.MissingCombos.Take(3).Select(x => $"{x.Item1}-{x.Item2}"))}"
@@ -976,22 +858,6 @@ namespace eft_dma_radar.UI.Pages
 
             txtChamsMaterialStatus.Text = statusText;
             txtChamsMaterialStatus.Foreground = new SolidColorBrush(statusColor);
-        }
-
-        private void UpdateAdvancedMemWritesWarning()
-        {
-            var advancedEnabled = Config.MemWrites.AdvancedMemWrites;
-            var chamsEnabled = Config.ChamsConfig.Enabled;
-
-            var showWarning = chamsEnabled && !advancedEnabled;
-            txtAdvancedMemWritesWarning.Visibility = showWarning ? Visibility.Visible : Visibility.Collapsed;
-
-            if (showWarning)
-            {
-                txtChamsMaterialStatus.Text = "Limited Mode";
-                txtChamsMaterialStatus.Foreground = new SolidColorBrush(Colors.Orange);
-                txtChamsMaterialCount.Text = "Basic/Visible only";
-            }
         }
 
         private async void btnRefreshChamsMaterials_Click(object sender, RoutedEventArgs e)
@@ -1137,7 +1003,6 @@ namespace eft_dma_radar.UI.Pages
                 if (result == MessageBoxResult.Yes)
                 {
                     var cache = Config.LowLevelCache;
-                    cache.ChamsMaterialCache.Clear();
 
                     _ = Task.Run(async () =>
                     {
@@ -1249,7 +1114,6 @@ namespace eft_dma_radar.UI.Pages
                     Config.MemWrites.Chams.Enabled = value;
                     MemWriteFeature<Chams>.Instance.Enabled = value;
                     ToggleChamsControls();
-                    UpdateAdvancedMemWritesWarning();
                     break;
 
                 case "EntityEnabled":

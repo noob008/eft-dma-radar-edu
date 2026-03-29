@@ -109,21 +109,7 @@
                                                         Tag="ClearChamsCache"/>
                                             </Grid>
 
-                                            <hc:SimpleStackPanel Margin="0,0,0,0">
-                                                <!-- Warning Text -->
-                                                <TextBlock x:Name="txtAdvancedMemWritesWarning"
-                                                           TextWrapping="Wrap"
-                                                           Style="{StaticResource LabelText}"
-                                                           FontSize="13"
-                                                           TextAlignment="Center"
-                                                           VerticalAlignment="Center">
-                                                           <Run Text="?" FontSize="16" />
-                                                           <Run Text="Advanced Material Types"/>
-                                                           <Run Text="(WireFrame, VisCheck Glow, VisCheck Flat)" FontWeight="Bold"/>
-                                                           <Run Text="require"/>
-                                                           <Run Text="Advanced Memory Writes" FontWeight="Bold" Foreground="Orange"/>
-                                                </TextBlock>
-                                            </hc:SimpleStackPanel>
+
                                         </hc:SimpleStackPanel>
                                     </GroupBox>
                                      

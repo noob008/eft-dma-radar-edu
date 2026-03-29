@@ -68,7 +68,6 @@
 		<PackageReference Include="SkiaSharp.Views.WPF" Version="3.119.2" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore.Abstractions" Version="9.0.6" />
 		<PackageReference Include="Microsoft.AspNetCore.SignalR.Protocols.MessagePack" Version="9.0.6" />
-		<PackageReference Include="Reloaded.Assembler" Version="1.0.16" />
 		<PackageReference Include="Svg.Skia" Version="3.0.3" />
 		<PackageReference Include="Collections.Pooled.V2" Version="2.2.2" />
 		<PackageReference Include="System.Management" Version="9.0.0" />

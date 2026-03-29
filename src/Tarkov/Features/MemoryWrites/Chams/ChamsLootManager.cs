@@ -198,25 +198,6 @@ namespace eft_dma_radar.Tarkov.Features
             if (!importantItemSettings.Enabled)
                 return;
 
-            // Add this check - if advanced mem writes is off, use basic mode instead of failing
-            if (!Config.AdvancedMemWrites && importantItemSettings.Mode != ChamsMode.Basic && importantItemSettings.Mode != ChamsMode.Visible)
-            {
-                XMLogging.WriteLine($"[Loot Chams] AdvancedMemWrites disabled, using Basic mode for ImportantItem instead of {importantItemSettings.Mode}");
-                var basicMaterialId = GetMaterialId(ChamsMode.Basic, ChamsEntityType.ImportantItem, importantItemSettings);
-                if (basicMaterialId != -1)
-                {
-                    foreach (var item in lootManager.FilteredLoot)
-                    {
-                        if (!IsValidLootItem(item) || !ShouldApplyImportantChams(item))
-                            continue;
-
-                        currentImportantItems.Add(item.ID);
-                    }
-                    ApplyChamsToItems(lootManager.FilteredLoot, currentImportantItems, ChamsMode.Basic, basicMaterialId);
-                }
-                return;
-            }
-
             if (!IsModeAvailable(importantItemSettings.Mode, ChamsEntityType.ImportantItem))
             {
                 // Only log this if we actually need advanced materials
@@ -243,24 +224,6 @@ namespace eft_dma_radar.Tarkov.Features
             var questItemSettings = ChamsConfig.GetEntitySettings(ChamsEntityType.QuestItem);
             if (!questItemSettings.Enabled)
                 return;
-
-            if (!Config.AdvancedMemWrites && questItemSettings.Mode != ChamsMode.Basic && questItemSettings.Mode != ChamsMode.Visible)
-            {
-                XMLogging.WriteLine($"[Loot Chams] AdvancedMemWrites disabled, using Basic mode for QuestItem instead of {questItemSettings.Mode}");
-                var basicMaterialId = GetMaterialId(ChamsMode.Basic, ChamsEntityType.QuestItem, questItemSettings);
-                if (basicMaterialId != -1)
-                {
-                    foreach (var item in lootManager.FilteredLoot)
-                    {
-                        if (!IsValidLootItem(item) || !ShouldApplyQuestChams(item))
-                            continue;
-
-                        currentQuestItems.Add(item.ID);
-                    }
-                    ApplyChamsToItems(lootManager.FilteredLoot, currentQuestItems, ChamsMode.Basic, basicMaterialId);
-                }
-                return;
-            }
 
             if (!IsModeAvailable(questItemSettings.Mode, ChamsEntityType.QuestItem))
             {
@@ -292,7 +255,10 @@ namespace eft_dma_radar.Tarkov.Features
             if (mode == ChamsMode.Basic || mode == ChamsMode.Visible)
                 return true;
 
-            return ChamsManager.AreMaterialsReadyForEntityType(lootType);
+            if (mode == ChamsMode.Basic || mode == ChamsMode.Visible)
+                return true;
+
+            return ChamsManager.Materials.Any(m => m.Key.Item2 == lootType && m.Value.InstanceID != 0);
         }
 
         private static bool ShouldApplyImportantChams(LootItem item)

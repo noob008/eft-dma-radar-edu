@@ -262,15 +262,6 @@ namespace eft_dma_radar.UI.Misc
                 "- Player reports are the #1 risk to getting banned.\n" +
                 "- None of these features are currently 'detected', but there is a VERY small risk that they could be in the future.";
 
-            if (context.FindName("chkAdvancedWrites") is CheckBox chkAdvancedWrites)
-                chkAdvancedWrites.ToolTip = "Enables Advanced Memory Writing Features. Includes (but not limited to):\n" +
-                "- AntiPage Feature.\n" +
-                "- Disable screen effects/Streamer Mode/Hide Raid Code\n" +
-                "- Advanced Chams Options.\n" +
-                "- Show proper AI Enemy Types (Passive).\n" +
-                "- Enhanced reliability of some features (Passive)." +
-                "\n\nWARNING: These features use a riskier injection technique. Use at your own risk.";
-
             if (context.FindName("btnAntiAFK") is Button btnAntiAFK)
                 btnAntiAFK.ToolTip = "Enables the Anti-AFK Feature. Prevents the game from closing due to inactivity.\n" +
                 "NOTE: Set this *right before* you go AFK while you are on the Tarkov Main Menu.\n" +
