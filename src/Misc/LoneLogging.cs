@@ -25,8 +25,10 @@ namespace eft_dma_radar.Common.Misc
 
         static XMLogging()
         {
-            // Always allocate console for debugging IL2CPP migration
+//#if DEBUG
+            // Allocate console only in Debug builds to avoid WPF flicker in Release.
             AllocateConsole();
+//#endif
 
             string[] args = Environment.GetCommandLineArgs();
             if (args?.Contains("-logging", StringComparer.OrdinalIgnoreCase) ?? false)
