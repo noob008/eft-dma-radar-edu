@@ -87,6 +87,11 @@ namespace eft_dma_radar.Tarkov.GameWorld
         private readonly List<Player> _realtimeScratch = new(128);
         private readonly List<Player> _validateScratch = new(128);
 
+        // Pre-allocated TimeSpans to avoid per-tick allocations in hot paths
+        private static readonly TimeSpan s_rateLimitInterval1ms = TimeSpan.FromMilliseconds(1);
+        private static readonly TimeSpan s_rateLimitInterval10s = TimeSpan.FromSeconds(10);
+        private static readonly TimeSpan s_rateLimitInterval30s = TimeSpan.FromSeconds(30);
+
         public bool InRaid => !_disposed;
         public IReadOnlyCollection<Player> Players => _rgtPlayers;
         public IReadOnlyCollection<IExplosiveItem> Explosives => _grenadeManager;
@@ -760,7 +765,7 @@ namespace eft_dma_radar.Tarkov.GameWorld
                     if (Memory.IsDisposed) { Dispose(); break; }
                     if (Config.RatelimitRealtimeReads || !CameraManagerBase.EspRunning || (MemWriteFeature<Aimbot>.Instance.Enabled && Aimbot.Engaged))
                     {
-                        _refreshWait.AutoWait(TimeSpan.FromMilliseconds(1), 1000);
+                        _refreshWait.AutoWait(s_rateLimitInterval1ms, 1000);
                     }
 
                     ct.ThrowIfCancellationRequested();
@@ -827,8 +832,8 @@ namespace eft_dma_radar.Tarkov.GameWorld
                     {
                         Log.WriteRateLimited(
                             AppLogLevel.Warning,
-                            $"realtime_nre_{p.Base:X}",
-                            TimeSpan.FromSeconds(30),
+                            p.RateLimitKeyRealtimeNre,
+                            s_rateLimitInterval30s,
                             $"[{p.Name} @ 0x{p.Base:X}] OnRealtimeLoop NRE (transient allocation race): {nre.Message}",
                             "RealtimeLoop");
                     }
@@ -845,7 +850,7 @@ namespace eft_dma_radar.Tarkov.GameWorld
                 Log.WriteRateLimited(
                     AppLogLevel.Warning,
                     "realtime_loop_ex",
-                    TimeSpan.FromSeconds(10),
+                    s_rateLimitInterval10s,
                     $"UpdatePlayers Loop FAILED: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}",
                     "RealtimeLoop");
             }
@@ -986,8 +991,8 @@ namespace eft_dma_radar.Tarkov.GameWorld
                         {
                             Log.WriteRateLimited(
                                 AppLogLevel.Warning,
-                                $"validate_nre_{p.Base:X}",
-                                TimeSpan.FromSeconds(30),
+                                p.RateLimitKeyValidateNre,
+                                s_rateLimitInterval30s,
                                 $"[{p.Name} @ 0x{p.Base:X}] OnValidateTransforms NRE (transient allocation race): {nre.Message}",
                                 "ValidateTransforms");
                         }
@@ -1004,7 +1009,7 @@ namespace eft_dma_radar.Tarkov.GameWorld
                 Log.WriteRateLimited(
                     AppLogLevel.Warning,
                     "validate_transforms_ex",
-                    TimeSpan.FromSeconds(10),
+                    s_rateLimitInterval10s,
                     $"ValidatePlayerTransforms Loop FAILED: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}",
                     "ValidateTransforms");
             }

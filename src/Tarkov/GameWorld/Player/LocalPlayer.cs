@@ -26,6 +26,7 @@ namespace eft_dma_radar.Tarkov.EFTPlayer
         private float _cachedHydration = 0f;
         private DateTime _lastEnergyHydrationRead = DateTime.MinValue;
         private readonly TimeSpan _energyHydrationCacheTime = TimeSpan.FromSeconds(3);
+        private Action<ScatterReadIndex> _localRealtimeCallback;
 
         /// <summary>
         /// ValueStruct layout for reading Current/Maximum health values (IL2CPP).
@@ -174,16 +175,19 @@ namespace eft_dma_radar.Tarkov.EFTPlayer
         {
             index.AddEntry<MemPointer>(-10, this.MovementContext + Offsets.MovementContext.CurrentState);
             index.AddEntry<MemPointer>(-11, this.HandsControllerAddr);
-            index.Callbacks += x1 =>
-            {
-                if (x1.TryGetResult<MemPointer>(-10, out var currentState))
-                    ILocalPlayer.PlayerState = currentState;
-                if (x1.TryGetResult<MemPointer>(-11, out var handsController))
-                    ILocalPlayer.HandsController = handsController;
-            };
+            _localRealtimeCallback ??= LocalRealtimeCallback;
+            index.Callbacks += _localRealtimeCallback;
             Firearm.OnRealtimeLoop(index);
             //explosives.OnRealtimeLoop(_scatterIndex);
             base.OnRealtimeLoop(index);
+        }
+
+        private void LocalRealtimeCallback(ScatterReadIndex x1)
+        {
+            if (x1.TryGetResult<MemPointer>(-10, out var currentState))
+                ILocalPlayer.PlayerState = currentState;
+            if (x1.TryGetResult<MemPointer>(-11, out var handsController))
+                ILocalPlayer.HandsController = handsController;
         }
 
         /// <summary>

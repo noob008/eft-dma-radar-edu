@@ -71,6 +71,7 @@ namespace eft_dma_radar.Tarkov.EFTPlayer
 
         public static implicit operator ulong(Player x) => x.Base;
         private static readonly ConcurrentDictionary<ulong, Stopwatch> _rateLimit = new();
+        private static readonly TimeSpan s_skeletonFixInterval = TimeSpan.FromSeconds(10);
         protected static readonly GroupManager _groups = new();
         protected static int _playerScavNumber = 0;
         public virtual int VoipId { get; }
@@ -163,6 +164,11 @@ namespace eft_dma_radar.Tarkov.EFTPlayer
         {
             ArgumentOutOfRangeException.ThrowIfZero(playerBase, nameof(playerBase));
             Base = playerBase;
+            // Pre-build rate-limit keys once per player to avoid per-tick string interpolation
+            RateLimitKeyRealtimeNre = $"realtime_nre_{playerBase:X}";
+            RateLimitKeyValidateNre = $"validate_nre_{playerBase:X}";
+            RateLimitKeySkeletonFix = $"skeleton_fix_{playerBase:X}";
+            RateLimitKeyBtrFix = $"btr_fix_{playerBase:X}";
         }
         public void SoftResetRuntimeState()
         {
@@ -245,6 +251,14 @@ namespace eft_dma_radar.Tarkov.EFTPlayer
         public ulong Base { get; }
 
         /// <summary>
+        /// Pre-built rate-limit keys to avoid per-tick string allocations.
+        /// </summary>
+        internal string RateLimitKeyRealtimeNre { get; }
+        internal string RateLimitKeyValidateNre { get; }
+        internal string RateLimitKeySkeletonFix { get; }
+        internal string RateLimitKeyBtrFix { get; }
+
+        /// <summary>
         /// True if the Player is Active (in the player list).
         /// </summary>
         public bool IsActive { get; private set; }
@@ -306,6 +320,11 @@ namespace eft_dma_radar.Tarkov.EFTPlayer
         /// Dynamic vertex count for skeleton reads (recalculated each frame if needed).
         /// </summary>
         protected int _verticesCount;
+
+        /// <summary>
+        /// Cached realtime loop callback delegate to avoid per-tick allocation.
+        /// </summary>
+        private Action<ScatterReadIndex> _realtimeCallback;
 
         /// <summary>
         /// Player's Gear/Loadout Information and contained items.
@@ -685,7 +704,7 @@ namespace eft_dma_radar.Tarkov.EFTPlayer
             index.AddEntry<Vector2>(-1, this.RotationAddress);
 
             // Bone vertices
-            foreach (var tr in Skeleton.Bones)
+            foreach (var tr in Skeleton.BonesDirect)
             {
                 index.AddEntry<SharedArray<UnityTransform.TrsX>>(
                     (int)(uint)tr.Key,
@@ -694,75 +713,78 @@ namespace eft_dma_radar.Tarkov.EFTPlayer
             }
 
             // -------------------------
-            // Scatter callback
+            // Scatter callback (cached delegate — avoids per-tick allocation)
             // -------------------------
-            index.Callbacks += x1 =>
+            _realtimeCallback ??= RealtimeLoopCallback;
+            index.Callbacks += _realtimeCallback;
+        }
+
+        private void RealtimeLoopCallback(ScatterReadIndex x1)
+        {
+            bool rotationOk = false;
+            bool bonesOk = true;
+
+            // ---- Rotation ----
+            if (x1.TryGetResult<Vector2>(-1, out var rotation))
+                rotationOk = this.SetRotation(ref rotation);
+
+            // ---- Bones ----
+            foreach (var tr in Skeleton.BonesDirect)
             {
-                bool rotationOk = false;
-                bool bonesOk = true;
-
-                // ---- Rotation ----
-                if (x1.TryGetResult<Vector2>(-1, out var rotation))
-                    rotationOk = this.SetRotation(ref rotation);
-
-                // ---- Bones ----
-                foreach (var tr in Skeleton.Bones)
+                if (x1.TryGetResult<SharedArray<UnityTransform.TrsX>>(
+                        (int)(uint)tr.Key,
+                        out var vertices))
                 {
-                    if (x1.TryGetResult<SharedArray<UnityTransform.TrsX>>(
-                            (int)(uint)tr.Key,
-                            out var vertices))
+                    try
                     {
-                        try
-                        {
-                            tr.Value.UpdatePosition(vertices);
-                        }
-                        catch
-                        {
-                            // Transform chain likely invalidated ¡ú rebuild just this bone
-                            Skeleton.ResetTransform(tr.Key);
-                            bonesOk = false;
-                        }
+                        tr.Value.UpdatePosition(vertices);
                     }
-                    else
+                    catch
                     {
+                        // Transform chain likely invalidated — rebuild just this bone
+                        Skeleton.ResetTransform(tr.Key);
                         bonesOk = false;
                     }
                 }
-
-                // -------------------------
-                // Stuck detection (AFTER update)
-                // -------------------------
-                Skeleton.UpdateStuckDetection();
-
-                // -------------------------
-                // Error / health tracking
-                // -------------------------
-                if (rotationOk && bonesOk)
-                    ErrorTimer.Reset();
                 else
-                    ErrorTimer.Start();
-
-                // -------------------------
-                // Stuck recovery (ONE-SHOT)
-                // -------------------------
-                if (Skeleton.IsLikelyStuck &&
-                    ErrorTimer.ElapsedMilliseconds > 800)
                 {
-                    // Rate limit skeleton fix messages to prevent spam (max once per 10 seconds per player)
-                    Log.WriteRateLimited(
-                        AppLogLevel.Warning,
-                        $"skeleton_fix_{Base:X}",
-                        TimeSpan.FromSeconds(10),
-                        $"{Name} skeleton frozen → soft reset",
-                        "SKELETON FIX");
-
-                    SoftResetRuntimeState();
-                    Skeleton.ResetESPCacheAndTransforms();
-
-                    // Explicitly clear stuck state
-                    Skeleton.IsLikelyStuck = false;
+                    bonesOk = false;
                 }
-            };
+            }
+
+            // -------------------------
+            // Stuck detection (AFTER update)
+            // -------------------------
+            Skeleton.UpdateStuckDetection();
+
+            // -------------------------
+            // Error / health tracking
+            // -------------------------
+            if (rotationOk && bonesOk)
+                ErrorTimer.Reset();
+            else
+                ErrorTimer.Start();
+
+            // -------------------------
+            // Stuck recovery (ONE-SHOT)
+            // -------------------------
+            if (Skeleton.IsLikelyStuck &&
+                ErrorTimer.ElapsedMilliseconds > 800)
+            {
+                // Rate limit skeleton fix messages to prevent spam (max once per 10 seconds per player)
+                Log.WriteRateLimited(
+                    AppLogLevel.Warning,
+                    RateLimitKeySkeletonFix,
+                    s_skeletonFixInterval,
+                    $"{Name} skeleton frozen — soft reset",
+                    "SKELETON FIX");
+
+                SoftResetRuntimeState();
+                Skeleton.ResetESPCacheAndTransforms();
+
+                // Explicitly clear stuck state
+                Skeleton.IsLikelyStuck = false;
+            }
         }
 
         protected bool TryInitSkeleton()
@@ -830,7 +852,7 @@ namespace eft_dma_radar.Tarkov.EFTPlayer
                 UnityOffsets.TransformInternal.TransformAccess);
 
             // Non-root bones: one AddEntry per bone, all registered before the single callback fires
-            foreach (var tr in skeleton.Bones)
+            foreach (var tr in skeleton.BonesDirect)
             {
                 if (tr.Key == eft_dma_radar.Common.Unity.Bones.HumanBase)
                     continue;
@@ -847,7 +869,7 @@ namespace eft_dma_radar.Tarkov.EFTPlayer
                     round2.AddEntry<MemPointer>(-1, rootTra + UnityOffsets.TransformAccess.Vertices);
 
                 // Non-root bones
-                foreach (var tr in skeleton.Bones)
+                foreach (var tr in skeleton.BonesDirect)
                 {
                     if (tr.Key == eft_dma_radar.Common.Unity.Bones.HumanBase)
                         continue;
@@ -865,7 +887,7 @@ namespace eft_dma_radar.Tarkov.EFTPlayer
                         _verticesCount = 0;
                         try
                         {
-                            foreach (var bone in skeleton.Bones.Keys)
+                            foreach (var bone in skeleton.BonesDirect.Keys)
                                 skeleton.ResetTransform(bone);
                         }
                         catch (Exception ex)
@@ -876,7 +898,7 @@ namespace eft_dma_radar.Tarkov.EFTPlayer
                     }
 
                     // Non-root bones
-                    foreach (var tr in skeleton.Bones)
+                    foreach (var tr in skeleton.BonesDirect)
                     {
                         if (tr.Key == eft_dma_radar.Common.Unity.Bones.HumanBase)
                             continue;

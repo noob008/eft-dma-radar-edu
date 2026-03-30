@@ -211,6 +211,7 @@ namespace eft_dma_radar.Common.Misc
         /// seen within <paramref name="interval"/>; otherwise returns <see langword="false"/>.
         /// Use to gate a block of manual <see cref="Write"/> calls at a fixed frequency.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool TryThrottle(string key, TimeSpan interval)
         {
             var now = DateTime.UtcNow;
@@ -223,8 +224,11 @@ namespace eft_dma_radar.Common.Misc
         /// <summary>
         /// Logs a message only if <paramref name="key"/> has not been seen within <paramref name="interval"/>.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void WriteRateLimited(AppLogLevel level, string key, TimeSpan interval, string message, string category = "")
         {
+            if (!IsEnabled(level))
+                return;
             var now = DateTime.UtcNow;
             if (_rateLimitCache.TryGetValue(key, out var last) && now - last < interval)
                 return;

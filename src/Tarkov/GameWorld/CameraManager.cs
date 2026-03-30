@@ -36,6 +36,8 @@ namespace eft_dma_radar.Tarkov.GameWorld
         private static ulong _allCamerasAddr;
         private static bool _staticInitDone;
         private static bool _debugDumpDone;
+        private Action<ScatterReadIndex>? _viewMatrixCallback;
+        private Action<ScatterReadIndex>? _fovAspectCallback;
 
         /// <summary>
         /// FPS Camera (unscoped).
@@ -1058,14 +1060,8 @@ namespace eft_dma_radar.Tarkov.GameWorld
             // View matrix
             index.AddEntry<Matrix4x4>(0, vmAddr);
 
-            index.Callbacks += x1 =>
-            {
-                ref Matrix4x4 vm = ref x1.GetRef<Matrix4x4>(0);
-                if (!Unsafe.IsNullRef(ref vm))
-                {
-                    _viewMatrix.Update(ref vm);
-                }
-            };
+            _viewMatrixCallback ??= ViewMatrixCallback;
+            index.Callbacks += _viewMatrixCallback;
 
             // Keep FOV / Aspect up to date from FPS camera regardless;
             // WorldToScreen only applies zoom when IsScoped.
@@ -1077,20 +1073,32 @@ namespace eft_dma_radar.Tarkov.GameWorld
                 index.AddEntry<float>(1, fovAddr);
                 index.AddEntry<float>(2, aspectAddr);
 
-                index.Callbacks += x2 =>
-                {
-                    if (x2.TryGetResult<float>(1, out var fov))
-                    {
-                        if (fov > 1f && fov < 180f)
-                            _fov = fov;
-                    }
+                _fovAspectCallback ??= FovAspectCallback;
+                index.Callbacks += _fovAspectCallback;
+            }
+        }
 
-                    if (x2.TryGetResult<float>(2, out var aspect))
-                    {
-                        if (aspect > 0.1f && aspect < 5f)
-                            _aspect = aspect;
-                    }
-                };
+        private void ViewMatrixCallback(ScatterReadIndex x1)
+        {
+            ref Matrix4x4 vm = ref x1.GetRef<Matrix4x4>(0);
+            if (!Unsafe.IsNullRef(ref vm))
+            {
+                _viewMatrix.Update(ref vm);
+            }
+        }
+
+        private static void FovAspectCallback(ScatterReadIndex x2)
+        {
+            if (x2.TryGetResult<float>(1, out var fov))
+            {
+                if (fov > 1f && fov < 180f)
+                    _fov = fov;
+            }
+
+            if (x2.TryGetResult<float>(2, out var aspect))
+            {
+                if (aspect > 0.1f && aspect < 5f)
+                    _aspect = aspect;
             }
         }
 

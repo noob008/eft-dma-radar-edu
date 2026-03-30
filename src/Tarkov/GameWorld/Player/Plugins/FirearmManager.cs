@@ -19,6 +19,7 @@ namespace eft_dma_radar.Tarkov.EFTPlayer.Plugins
 
         private readonly LocalPlayer _localPlayer;
         private CachedHandsInfo _hands;
+        private Action<ScatterReadIndex> _fireportCallback;
 
         /// <summary>
         /// Returns the Hands Controller Address and if the held item is a weapon.
@@ -72,17 +73,20 @@ namespace eft_dma_radar.Tarkov.EFTPlayer.Plugins
                 fireport.VerticesAddr,
                 (fireport.Index + 1) * SizeChecker<UnityTransform.TrsX>.Size);
 
-            index.Callbacks += x1 =>
+            _fireportCallback ??= FireportRealtimeCallback;
+            index.Callbacks += _fireportCallback;
+        }
+
+        private void FireportRealtimeCallback(ScatterReadIndex x1)
+        {
+            if (x1.TryGetResult<SharedArray<UnityTransform.TrsX>>(-20, out var vertices))
+                UpdateFireport(vertices);
+            else
             {
-                if (x1.TryGetResult<SharedArray<UnityTransform.TrsX>>(-20, out var vertices))
-                    UpdateFireport(vertices);
-                else
-                {
-                    _fireportStallTicks++;
-                    if (_fireportStallTicks > 15)
-                        ResetFireport();
-                }
-            };
+                _fireportStallTicks++;
+                if (_fireportStallTicks > 15)
+                    ResetFireport();
+            }
         }
         private long _nextFireportRetry;
 

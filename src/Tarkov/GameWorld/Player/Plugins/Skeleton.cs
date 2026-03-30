@@ -54,6 +54,11 @@ namespace eft_dma_radar.Tarkov.EFTPlayer.Plugins
         public bool IsLikelyStuck { get; set; }
         public UnityTransform Root { get; private set; }
         public IReadOnlyDictionary<Bones, UnityTransform> Bones => _bones;
+        /// <summary>
+        /// Direct access to the internal bones dictionary for hot-path iteration.
+        /// Avoids IReadOnlyDictionary enumerator boxing overhead.
+        /// </summary>
+        internal Dictionary<Bones, UnityTransform> BonesDirect => _bones;
         public int VerticesCount { get; private set; }
 
         public Skeleton(IPlayer player, Func<Bones, uint[]> getTransformChainFunc)
@@ -526,7 +531,8 @@ namespace eft_dma_radar.Tarkov.EFTPlayer.Plugins
             Array.Clear(ESPBuffer, 0, ESPBuffer.Length);
 
             // Rebuild all transforms (preserve last valid positions)
-            foreach (var bone in _bones.Keys.ToList())
+            ResetTransform(eft_dma_radar.Common.Unity.Bones.HumanBase);
+            foreach (var bone in AllSkeletonBones.Span)
             {
                 ResetTransform(bone);
             }

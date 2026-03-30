@@ -123,23 +123,28 @@ namespace eft_dma_radar.Tarkov.GameWorld
                 Log.WriteLine($"CRITICAL ERROR - RegisteredPlayers Loop FAILED: {ex}");
             }
         }
+        private static readonly TimeSpan s_btrRateLimitInterval = TimeSpan.FromSeconds(5);
+        /// <summary>
+        /// Scratch list reused by HandleBtrStickiness to avoid per-call allocation.
+        /// </summary>
+        private readonly List<Vector3> _btrPosScratch = new(4);
         private void HandleBtrStickiness()
         {
+            // Single pass: collect BTR positions and process other players simultaneously.
+            // ConcurrentDictionary.Values is snapshotted once instead of three times.
+            _btrPosScratch.Clear();
+            var allPlayers = _players.Values;
+            foreach (var p in allPlayers)
+            {
+                if (p is BtrOperator btr)
+                    _btrPosScratch.Add(btr.Position);
+            }
+
             // Fast-path: no BTR operators on this map (the common case)
-            // Avoid LINQ + ToList() allocation when there are no BTRs at all
-            bool hasBtr = false;
-            foreach (var p in _players.Values)
-                if (p is BtrOperator) { hasBtr = true; break; }
-            if (!hasBtr)
+            if (_btrPosScratch.Count == 0)
                 return;
 
-            // Collect BTR positions (rare path — only when a BTR is present)
-            var btrs = new List<Vector3>(4);
-            foreach (var p in _players.Values)
-                if (p is BtrOperator btr)
-                    btrs.Add(btr.Position);
-
-            foreach (var player in _players.Values)
+            foreach (var player in allPlayers)
             {
                 // Skip BTR entities themselves
                 if (player is BtrOperator)
@@ -159,7 +164,7 @@ namespace eft_dma_radar.Tarkov.GameWorld
 
                 // Check if player is sitting on a BTR
                 bool nearBtr = false;
-                foreach (var btrPos in btrs)
+                foreach (var btrPos in _btrPosScratch)
                 {
                     if (NearlyEqual(player.Position, btrPos))
                     {
@@ -181,12 +186,12 @@ namespace eft_dma_radar.Tarkov.GameWorld
 
                 if (MapRotationNearlyEqual(currentRot, player.LastBtrMapRotation))
                 {
-                    // Rotation is stable → legit BTR passenger
+                    // Rotation is stable — legit BTR passenger
                     player.BtrStaticRotationTicks++;
                 }
                 else
                 {
-                    // Rotation changed → suspicious
+                    // Rotation changed — suspicious
                     player.BtrStaticRotationTicks = 0;
                 }
 
@@ -205,27 +210,23 @@ namespace eft_dma_radar.Tarkov.GameWorld
                         Log.WriteRateLimited(
                             AppLogLevel.Warning,
                             "btr_fix_local",
-                            TimeSpan.FromSeconds(5),
-                            "LocalPlayer stuck to BTR with rotating view → soft reset",
+                            s_btrRateLimitInterval,
+                            "LocalPlayer stuck to BTR with rotating view — soft reset",
                             "BTR FIX");
-
-                        player.BtrStickTicks = 0;
-                        player.BtrStaticRotationTicks = 0;
-                        player.SoftResetRuntimeState();
                     }
                     else
                     {
                         Log.WriteRateLimited(
                             AppLogLevel.Warning,
-                            $"btr_fix_{player.Base:X}",
-                            TimeSpan.FromSeconds(5),
-                            $"Stuck player {player.Name} rotating at BTR → soft reset",
+                            player.RateLimitKeyBtrFix,
+                            s_btrRateLimitInterval,
+                            $"Stuck player {player.Name} rotating at BTR — soft reset",
                             "BTR FIX");
-
-                        player.BtrStickTicks = 0;
-                        player.BtrStaticRotationTicks = 0;
-                        player.SoftResetRuntimeState();
                     }
+
+                    player.BtrStickTicks = 0;
+                    player.BtrStaticRotationTicks = 0;
+                    player.SoftResetRuntimeState();
                 }
             }
         }

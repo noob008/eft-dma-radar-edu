@@ -17,6 +17,7 @@ namespace eft_dma_radar.Tarkov.EFTPlayer
     {
         private readonly ulong _btrView;
         private Vector3 _position;
+        private Action<ScatterReadIndex> _btrRealtimeCallback;
         public static EntityTypeSettingsESP ESPSettings => ESP.Config.EntityTypeESPSettings.GetSettings("BTR");
         public static EntityTypeSettings Settings =>
             Program.Config.EntityTypeSettings.GetSettings("BTR");
@@ -56,11 +57,14 @@ namespace eft_dma_radar.Tarkov.EFTPlayer
             // Unique index space, no collision with players
             index.AddEntry<Vector3>(0, _btrView + Offsets.BTRView._previousPosition);
 
-            index.Callbacks += x =>
-            {
-                if (x.TryGetResult<Vector3>(0, out var pos))
-                    _position = pos;
-            };
+            _btrRealtimeCallback ??= BtrRealtimeCallback;
+            index.Callbacks += _btrRealtimeCallback;
+        }
+
+        private void BtrRealtimeCallback(ScatterReadIndex x)
+        {
+            if (x.TryGetResult<Vector3>(0, out var pos))
+                _position = pos;
         }
 
         // ---------------------------------------------
