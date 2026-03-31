@@ -2089,7 +2089,7 @@ namespace eft_dma_radar.UI.Pages
         }
 
         /// <summary>
-        /// Reverts all text paints back to the original CustomFonts defaults.
+        /// Reverts all text fonts back to the original CustomFonts defaults.
         /// </summary>
         private static void ResetToDefaultFont()
         {
@@ -2098,106 +2098,29 @@ namespace eft_dma_radar.UI.Pages
             var bold   = CustomFonts.SKFontFamilyBold;
             var italic = CustomFonts.SKFontFamilyItalic;
 
-            // Radar paints
-            SKPaints.TextMouseoverGroup.Typeface               = def;
-            SKPaints.TextLocalPlayer.Typeface                  = def;
-            SKPaints.TextTeammate.Typeface                     = def;
-            SKPaints.TextUSEC.Typeface                         = def;
-            SKPaints.TextBEAR.Typeface                         = def;
-            SKPaints.TextSpecial.Typeface                      = def;
-            SKPaints.TextStreamer.Typeface                     = def;
-            SKPaints.TextAimbotLocked.Typeface                 = def;
-            SKPaints.TextScav.Typeface                         = def;
-            SKPaints.TextRaider.Typeface                       = def;
-            SKPaints.TextBoss.Typeface                         = def;
-            SKPaints.TextFocused.Typeface                      = def;
-            SKPaints.TextPScav.Typeface                        = def;
-            SKPaints.TextMouseover.Typeface                    = def;
-            SKPaints.TextCorpse.Typeface                       = def;
-            SKPaints.TextMeds.Typeface                         = def;
-            SKPaints.TextFood.Typeface                         = def;
-            SKPaints.TextWeapons.Typeface                      = def;
-            SKPaints.TextBackpacks.Typeface                    = def;
-            SKPaints.TextQuestItem.Typeface                    = def;
-            SKPaints.TextAirdrop.Typeface                      = def;
-            SKPaints.TextWishlistItem.Typeface                 = def;
-            SKPaints.QuestHelperText.Typeface                  = def;
-            SKPaints.TextLoot.Typeface                         = def;
-            SKPaints.TextImportantLoot.Typeface                = def;
-            SKPaints.TextContainer.Typeface                    = def;
-            SKPaints.TextRadarStatus.Typeface                  = def;
-            SKPaints.TextStatusSmall.Typeface                  = def;
-            SKPaints.TextExplosives.Typeface                   = def;
-            SKPaints.TextExplosivesDanger.Typeface             = def;
-            SKPaints.TextExfilOpen.Typeface                    = def;
-            SKPaints.TextExfilPending.Typeface                 = def;
-            SKPaints.TextExfilClosed.Typeface                  = def;
-            SKPaints.TextExfilInactive.Typeface                = def;
-            SKPaints.TextExfilTransit.Typeface                 = def;
-            SKPaints.TextDoorOpen.Typeface                     = def;
-            SKPaints.TextDoorLocked.Typeface                   = def;
-            SKPaints.TextDoorShut.Typeface                     = def;
-            SKPaints.TextDoorInteracting.Typeface              = def;
-            SKPaints.TextDoorBreaching.Typeface                = def;
-            SKPaints.TextPulsingAsterisk.Typeface              = def;
-            SKPaints.TextPulsingAsteriskOutline.Typeface       = def;
-            SKPaints.TextSwitch.Typeface                       = def;
-            SKPaints.TextOutline.Typeface                      = def;
-            // ESP player/entity label paints
-            SKPaints.TextUSECESP.Typeface                      = med;
-            SKPaints.TextBEARESP.Typeface                      = med;
-            SKPaints.TextBEARESPAligned.Typeface               = med;
-            SKPaints.TextScavESP.Typeface                      = med;
-            SKPaints.TextRaiderESP.Typeface                    = med;
-            SKPaints.TextBossESP.Typeface                      = med;
-            SKPaints.TextAimbotLockedESP.Typeface              = med;
-            SKPaints.TextFocusedESP.Typeface                   = med;
-            SKPaints.TextStreamerESP.Typeface                   = med;
-            SKPaints.TextSpecialESP.Typeface                   = med;
-            SKPaints.TextPlayerScavESP.Typeface                = med;
-            SKPaints.TextFriendlyESP.Typeface                  = med;
-            SKPaints.TextLootESP.Typeface                      = med;
-            SKPaints.TextCorpseESP.Typeface                    = med;
-            SKPaints.TextImpLootESP.Typeface                   = med;
-            SKPaints.TextAirdropESP.Typeface                   = med;
-            SKPaints.TextContainerLootESP.Typeface             = med;
-            SKPaints.TextMedsESP.Typeface                      = med;
-            SKPaints.TextFoodESP.Typeface                      = med;
-            SKPaints.TextBackpackESP.Typeface                  = med;
-            SKPaints.TextWeaponsESP.Typeface                   = med;
-            SKPaints.TextQuestItemESP.Typeface                 = med;
-            SKPaints.TextWishlistItemESP.Typeface              = med;
-            SKPaints.TextQuestHelperESP.Typeface               = med;
-            SKPaints.TextExplosiveESP.Typeface                 = med;
-            SKPaints.TextExfilOpenESP.Typeface                 = med;
-            SKPaints.TextExfilPendingESP.Typeface              = med;
-            SKPaints.TextExfilClosedESP.Typeface               = med;
-            SKPaints.TextExfilInactiveESP.Typeface             = med;
-            SKPaints.TextExfilTransitESP.Typeface              = med;
-            SKPaints.TextSwitchesESP.Typeface                  = med;
-            SKPaints.TextDoorOpenESP.Typeface                  = med;
-            SKPaints.TextDoorShutESP.Typeface                  = med;
-            SKPaints.TextDoorLockedESP.Typeface                = med;
-            SKPaints.TextDoorInteractingESP.Typeface           = med;
-            SKPaints.TextDoorBreachingESP.Typeface             = med;
-            // ESP HUD paints
-            SKPaints.TextBasicESP.Typeface                     = med;
-            SKPaints.TextBasicESPLeftAligned.Typeface          = med;
-            SKPaints.TextESPFPS.Typeface                       = med;
-            SKPaints.TextESPRaidStats.Typeface                 = med;
-            SKPaints.TextESPStatusText.Typeface                = med;
-            SKPaints.TextStatusSmallEsp.Typeface               = med;
-            SKPaints.TextMagazineESP.Typeface                  = bold;
-            SKPaints.TextMagazineInfoESP.Typeface              = italic;
-            SKPaints.TextEnergyHydrationBarESP.Typeface        = med;
-            SKPaints.TextEnergyHydrationBarOutlineESP.Typeface = med;
-            SKPaints.TextESPClosestPlayer.Typeface             = med;
-            SKPaints.TextESPTopLoot.Typeface                   = med;
-            SKPaints.TextOverridePlayerESP.Typeface            = med;
-            SKPaints.TextPulsingAsteriskESP.Typeface           = def;
-            SKPaints.TextPulsingAsteriskOutlineESP.Typeface    = def;
+            // Static radar fonts
+            SKPaints.FontRegular12.Typeface       = def;
+            SKPaints.FontRegular48.Typeface       = def;
+            SKPaints.FontMedium12.Typeface        = med;
+            SKPaints.FontMedium11.Typeface        = med;
+            SKPaints.FontMedium13.Typeface        = med;
+            SKPaints.FontMedium16.Typeface        = med;
+            SKPaints.FontMedium18.Typeface        = med;
+            SKPaints.FontBold42.Typeface          = bold;
+            SKPaints.FontItalic16.Typeface        = italic;
+            // Mutable radar fonts
+            SKPaints.RadarFontRegular12.Typeface  = def;
+            SKPaints.RadarFontRegular48.Typeface  = def;
+            SKPaints.RadarFontMedium13.Typeface   = med;
+            // Mutable ESP fonts
+            SKPaints.ESPFontMedium12.Typeface     = med;
+            SKPaints.ESPFontMedium11.Typeface     = med;
+            SKPaints.ESPFontMedium13.Typeface     = med;
+            SKPaints.ESPFontMedium18.Typeface     = med;
+            SKPaints.ESPFontBold42.Typeface       = bold;
+            SKPaints.ESPFontItalic16.Typeface     = italic;
             // AimviewWidget loot label
-            AimviewWidget.TextESPWidgetLoot.Typeface           = def;
+            AimviewWidget.AimviewLootFont.Typeface = def;
         }
 
         /// <summary>
@@ -2219,106 +2142,29 @@ namespace eft_dma_radar.UI.Pages
                 skData.Dispose();
                 if (t is null) return;
 
-                // Radar paints
-                SKPaints.TextMouseoverGroup.Typeface               = t;
-                SKPaints.TextLocalPlayer.Typeface                  = t;
-                SKPaints.TextTeammate.Typeface                     = t;
-                SKPaints.TextUSEC.Typeface                         = t;
-                SKPaints.TextBEAR.Typeface                         = t;
-                SKPaints.TextSpecial.Typeface                      = t;
-                SKPaints.TextStreamer.Typeface                     = t;
-                SKPaints.TextAimbotLocked.Typeface                 = t;
-                SKPaints.TextScav.Typeface                         = t;
-                SKPaints.TextRaider.Typeface                       = t;
-                SKPaints.TextBoss.Typeface                         = t;
-                SKPaints.TextFocused.Typeface                      = t;
-                SKPaints.TextPScav.Typeface                        = t;
-                SKPaints.TextMouseover.Typeface                    = t;
-                SKPaints.TextCorpse.Typeface                       = t;
-                SKPaints.TextMeds.Typeface                         = t;
-                SKPaints.TextFood.Typeface                         = t;
-                SKPaints.TextWeapons.Typeface                      = t;
-                SKPaints.TextBackpacks.Typeface                    = t;
-                SKPaints.TextQuestItem.Typeface                    = t;
-                SKPaints.TextAirdrop.Typeface                      = t;
-                SKPaints.TextWishlistItem.Typeface                 = t;
-                SKPaints.QuestHelperText.Typeface                  = t;
-                SKPaints.TextLoot.Typeface                         = t;
-                SKPaints.TextImportantLoot.Typeface                = t;
-                SKPaints.TextContainer.Typeface                    = t;
-                SKPaints.TextRadarStatus.Typeface                  = t;
-                SKPaints.TextStatusSmall.Typeface                  = t;
-                SKPaints.TextExplosives.Typeface                   = t;
-                SKPaints.TextExplosivesDanger.Typeface             = t;
-                SKPaints.TextExfilOpen.Typeface                    = t;
-                SKPaints.TextExfilPending.Typeface                 = t;
-                SKPaints.TextExfilClosed.Typeface                  = t;
-                SKPaints.TextExfilInactive.Typeface                = t;
-                SKPaints.TextExfilTransit.Typeface                 = t;
-                SKPaints.TextDoorOpen.Typeface                     = t;
-                SKPaints.TextDoorLocked.Typeface                   = t;
-                SKPaints.TextDoorShut.Typeface                     = t;
-                SKPaints.TextDoorInteracting.Typeface              = t;
-                SKPaints.TextDoorBreaching.Typeface                = t;
-                SKPaints.TextPulsingAsterisk.Typeface              = t;
-                SKPaints.TextPulsingAsteriskOutline.Typeface       = t;
-                SKPaints.TextSwitch.Typeface                       = t;
-                SKPaints.TextOutline.Typeface                      = t;
-                // ESP player/entity label paints (all player names, loot, exfils, doors etc.)
-                SKPaints.TextUSECESP.Typeface                      = t;
-                SKPaints.TextBEARESP.Typeface                      = t;
-                SKPaints.TextBEARESPAligned.Typeface               = t;
-                SKPaints.TextScavESP.Typeface                      = t;
-                SKPaints.TextRaiderESP.Typeface                    = t;
-                SKPaints.TextBossESP.Typeface                      = t;
-                SKPaints.TextAimbotLockedESP.Typeface              = t;
-                SKPaints.TextFocusedESP.Typeface                   = t;
-                SKPaints.TextStreamerESP.Typeface                   = t;
-                SKPaints.TextSpecialESP.Typeface                   = t;
-                SKPaints.TextPlayerScavESP.Typeface                = t;
-                SKPaints.TextFriendlyESP.Typeface                  = t;
-                SKPaints.TextLootESP.Typeface                      = t;
-                SKPaints.TextCorpseESP.Typeface                    = t;
-                SKPaints.TextImpLootESP.Typeface                   = t;
-                SKPaints.TextAirdropESP.Typeface                   = t;
-                SKPaints.TextContainerLootESP.Typeface             = t;
-                SKPaints.TextMedsESP.Typeface                      = t;
-                SKPaints.TextFoodESP.Typeface                      = t;
-                SKPaints.TextBackpackESP.Typeface                  = t;
-                SKPaints.TextWeaponsESP.Typeface                   = t;
-                SKPaints.TextQuestItemESP.Typeface                 = t;
-                SKPaints.TextWishlistItemESP.Typeface              = t;
-                SKPaints.TextQuestHelperESP.Typeface               = t;
-                SKPaints.TextExplosiveESP.Typeface                 = t;
-                SKPaints.TextExfilOpenESP.Typeface                 = t;
-                SKPaints.TextExfilPendingESP.Typeface              = t;
-                SKPaints.TextExfilClosedESP.Typeface               = t;
-                SKPaints.TextExfilInactiveESP.Typeface             = t;
-                SKPaints.TextExfilTransitESP.Typeface              = t;
-                SKPaints.TextSwitchesESP.Typeface                  = t;
-                SKPaints.TextDoorOpenESP.Typeface                  = t;
-                SKPaints.TextDoorShutESP.Typeface                  = t;
-                SKPaints.TextDoorLockedESP.Typeface                = t;
-                SKPaints.TextDoorInteractingESP.Typeface           = t;
-                SKPaints.TextDoorBreachingESP.Typeface             = t;
-                // ESP HUD paints (magazine, FPS, killfeed, energy bars, etc.)
-                SKPaints.TextBasicESP.Typeface                     = t;
-                SKPaints.TextBasicESPLeftAligned.Typeface          = t;
-                SKPaints.TextESPFPS.Typeface                       = t;
-                SKPaints.TextESPRaidStats.Typeface                 = t;
-                SKPaints.TextESPStatusText.Typeface                = t;
-                SKPaints.TextStatusSmallEsp.Typeface               = t;
-                SKPaints.TextMagazineESP.Typeface                  = t;
-                SKPaints.TextMagazineInfoESP.Typeface              = t;
-                SKPaints.TextEnergyHydrationBarESP.Typeface        = t;
-                SKPaints.TextEnergyHydrationBarOutlineESP.Typeface = t;
-                SKPaints.TextESPClosestPlayer.Typeface             = t;
-                SKPaints.TextESPTopLoot.Typeface                   = t;
-                SKPaints.TextOverridePlayerESP.Typeface            = t;
-                SKPaints.TextPulsingAsteriskESP.Typeface           = t;
-                SKPaints.TextPulsingAsteriskOutlineESP.Typeface    = t;
-                // AimviewWidget loot label (its own local paint)
-                AimviewWidget.TextESPWidgetLoot.Typeface           = t;
+                // Static radar fonts
+                SKPaints.FontRegular12.Typeface       = t;
+                SKPaints.FontRegular48.Typeface       = t;
+                SKPaints.FontMedium12.Typeface        = t;
+                SKPaints.FontMedium11.Typeface        = t;
+                SKPaints.FontMedium13.Typeface        = t;
+                SKPaints.FontMedium16.Typeface        = t;
+                SKPaints.FontMedium18.Typeface        = t;
+                SKPaints.FontBold42.Typeface          = t;
+                SKPaints.FontItalic16.Typeface        = t;
+                // Mutable radar fonts
+                SKPaints.RadarFontRegular12.Typeface  = t;
+                SKPaints.RadarFontRegular48.Typeface  = t;
+                SKPaints.RadarFontMedium13.Typeface   = t;
+                // Mutable ESP fonts
+                SKPaints.ESPFontMedium12.Typeface     = t;
+                SKPaints.ESPFontMedium11.Typeface     = t;
+                SKPaints.ESPFontMedium13.Typeface     = t;
+                SKPaints.ESPFontMedium18.Typeface     = t;
+                SKPaints.ESPFontBold42.Typeface       = t;
+                SKPaints.ESPFontItalic16.Typeface     = t;
+                // AimviewWidget loot label
+                AimviewWidget.AimviewLootFont.Typeface = t;
 
                 Config.FontName = fontName;
                 Config.Save();
