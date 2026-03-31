@@ -176,17 +176,17 @@ public static class ConfigManager
         }
     }
 
+    private static readonly JsonSerializerOptions _saveOptions = new()
+    {
+        WriteIndented = true,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
     private static bool SafeSaveConfig(Config config, string path)
     {
         try
         {
-            var options = new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-            };
-
-            var json = JsonSerializer.Serialize(config, options);
+            var json = JsonSerializer.Serialize(config, _saveOptions);
             File.WriteAllText(path, json);
             return true;
         }
@@ -342,7 +342,8 @@ Log.WriteLine($"[Config] Saved new config: {configName}");
             SetLastSelectedConfig(defaultConfig);
         }
     }
-}
+} // end ConfigManager
+
 namespace eft_dma_radar.UI.Misc
 {
     /// <summary>
@@ -678,11 +679,20 @@ namespace eft_dma_radar.UI.Misc
 
         [JsonIgnore] private static readonly Lock _syncRoot = new();
 
-        [JsonIgnore]
-        private FileInfo _configFile => new(Path.Combine(Program.ConfigPath.FullName, Filename));
+        private static readonly JsonSerializerOptions _loadOptions = new()
+        {
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+            IgnoreReadOnlyProperties = true,
+            ReadCommentHandling = JsonCommentHandling.Skip,
+            AllowTrailingCommas = true,
+            PropertyNameCaseInsensitive = true
+        };
 
-        [JsonIgnore]
-        private FileInfo _tempFile => new(Path.Combine(Program.ConfigPath.FullName, Filename + ".tmp"));
+        private static readonly JsonSerializerOptions _saveOptions = new()
+        {
+            WriteIndented = true,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        };
 
         public static Config Load(string filename)
         {
@@ -690,11 +700,10 @@ namespace eft_dma_radar.UI.Misc
             {
                 try
                 {
-                    Config config = new Config();
-                    config.Filename = filename;
+                    Config config = new() { Filename = filename };
 
                     // Always load from custom config directory now
-                    FileInfo configFile = new FileInfo(Path.Combine(Program.CustomConfigPath.FullName, filename));
+                    FileInfo configFile = new(Path.Combine(Program.CustomConfigPath.FullName, filename));
                     var tempFile = new FileInfo(configFile.FullName + ".tmp");
 
                     if (configFile.Exists)
@@ -722,19 +731,8 @@ namespace eft_dma_radar.UI.Misc
                         if (!string.IsNullOrEmpty(json))
                         {
                             try
-                            {
-                                var options = new JsonSerializerOptions
-                                {
-                                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-                                    IgnoreReadOnlyProperties = true,
-                                    ReadCommentHandling = JsonCommentHandling.Skip,
-                                    AllowTrailingCommas = true,
-                                    PropertyNameCaseInsensitive = true
-                                };
-
-                                config = JsonSerializer.Deserialize<Config>(json, options);
-                                if (config is null)
-                                    throw new JsonException("Deserialized config was null.");
+                            {                                config = JsonSerializer.Deserialize<Config>(json, _loadOptions)
+                                    ?? throw new JsonException("Deserialized config was null.");
                                 config.Filename = filename;
                                 config.ConfigName = Path.GetFileNameWithoutExtension(filename);
 
@@ -745,11 +743,13 @@ namespace eft_dma_radar.UI.Misc
                             {
                                 Log.WriteLine($"Error deserializing config: {ex.Message}");
 
-                                config = new Config();
-                                config.Filename = filename;
-                                config.ConfigName = Path.GetFileNameWithoutExtension(filename);
+                                config = new Config
+                                {
+                                    Filename = filename,
+                                    ConfigName = Path.GetFileNameWithoutExtension(filename)
+                                };
 
-                                if (!(ex is JsonException))
+                                if (ex is not JsonException)
                                 {
                                     MessageBox.Show(
                                         $"Config File Error: {ex.Message}\n\n" +
@@ -760,18 +760,22 @@ namespace eft_dma_radar.UI.Misc
 
                         if (config == null)
                         {
-                            config = new Config();
-                            config.Filename = filename;
-                            config.ConfigName = Path.GetFileNameWithoutExtension(filename);
+                            config = new Config
+                            {
+                                Filename = filename,
+                                ConfigName = Path.GetFileNameWithoutExtension(filename)
+                            };
                             SaveInternal(config);
                         }
                     }
                     else
                     {
                         // Create new config if file doesn't exist
-                        config = new Config();
-                        config.Filename = filename;
-                        config.ConfigName = Path.GetFileNameWithoutExtension(filename);
+                        config = new Config
+                        {
+                            Filename = filename,
+                            ConfigName = Path.GetFileNameWithoutExtension(filename)
+                        };
 
                         // Only set as default if there are no other configs
                         var existingConfigs = Directory.GetFiles(Program.CustomConfigPath.FullName, "*.json");
@@ -784,10 +788,11 @@ namespace eft_dma_radar.UI.Misc
                 catch (Exception ex)
                 {
                     Log.WriteLine($"CRITICAL ERROR Loading Config: {ex.Message}");
-                    var config = new Config();
-                    config.Filename = filename;
-                    config.ConfigName = Path.GetFileNameWithoutExtension(filename);
-                    return config;
+                    return new Config
+                    {
+                        Filename = filename,
+                        ConfigName = Path.GetFileNameWithoutExtension(filename)
+                    };
                 }
             }
         }
@@ -797,163 +802,88 @@ namespace eft_dma_radar.UI.Misc
         /// </summary>
         public static void EnsureComplexObjectsInitialized(Config config)
         {
-            if (config.ToolbarPosition == null)
-                config.ToolbarPosition = new ToolbarPositionConfig();
-
-            if (config.PanelPositions == null)
-                config.PanelPositions = new PanelPositionsConfig();
-
-            if (config.ExpanderStates == null)
-                config.ExpanderStates = new ExpanderStatesConfig();
-
-            if (config.PlayerTypeSettings == null)
-                config.PlayerTypeSettings = new PlayerTypeSettingsConfig();
-
-            if (config.EntityTypeSettings == null)
-                config.EntityTypeSettings = new EntityTypeSettingsConfig();
-
-            if (config.QuestHelper == null)
-                config.QuestHelper = new QuestHelperConfig();
-
-            if (config.MemWrites == null)
-                config.MemWrites = new MemWritesConfig();
-
-            if (config.ESP == null)
-                config.ESP = new ESPConfig();
-
-            if (config.Widgets == null)
-                config.Widgets = new WidgetsConfig();
-
-            if (config.ESPWidgets == null)
-                config.ESPWidgets = new ESPWidgetsConfig();
-
-            if (config.HotKeys == null)
-                config.HotKeys = new HotkeyConfig();
-
-            if (config.WebRadar == null)
-                config.WebRadar = new WebRadarConfig();
-
-            if (config.Containers == null)
-                config.Containers = new ContainersConfig();
-
-            if (config.Cache == null)
-                config.Cache = new PersistentCache();
-
-            if (config.Colors == null)
-                config.Colors = RadarColorOptions.GetDefaultColors();
-
-            if (config.InterfaceColors == null)
-                config.InterfaceColors = InterfaceColorOptions.GetDefaultColors();
-
-            if (config.QuestPlanner == null)
-                config.QuestPlanner = new QuestPlannerSettings();
+            config.ToolbarPosition ??= new ToolbarPositionConfig();
+            config.PanelPositions ??= new PanelPositionsConfig();
+            config.ExpanderStates ??= new ExpanderStatesConfig();
+            config.PlayerTypeSettings ??= new PlayerTypeSettingsConfig();
+            config.EntityTypeSettings ??= new EntityTypeSettingsConfig();
+            config.QuestHelper ??= new QuestHelperConfig();
+            config.MemWrites ??= new MemWritesConfig();
+            config.ESP ??= new ESPConfig();
+            config.Widgets ??= new WidgetsConfig();
+            config.ESPWidgets ??= new ESPWidgetsConfig();
+            config.HotKeys ??= new HotkeyConfig();
+            config.WebRadar ??= new WebRadarConfig();
+            config.Containers ??= new ContainersConfig();
+            config.Cache ??= new PersistentCache();
+            config.Colors ??= RadarColorOptions.GetDefaultColors();
+            config.InterfaceColors ??= InterfaceColorOptions.GetDefaultColors();
+            config.QuestPlanner ??= new QuestPlannerSettings();
 
             if (config.PanelPositions != null)
             {
-                if (config.PanelPositions.GeneralSettings == null)
-                    config.PanelPositions.GeneralSettings = new PanelPositionConfig();
-
-                if (config.PanelPositions.LootSettings == null)
-                    config.PanelPositions.LootSettings = new PanelPositionConfig();
-
-                if (config.PanelPositions.MemoryWriting == null)
-                    config.PanelPositions.MemoryWriting = new PanelPositionConfig();
-
-                if (config.PanelPositions.ESP == null)
-                    config.PanelPositions.ESP = new PanelPositionConfig();
-
-                if (config.PanelPositions.LootFilter == null)
-                    config.PanelPositions.LootFilter = new PanelPositionConfig();
-
-                if (config.PanelPositions.PlayerPreview == null)
-                    config.PanelPositions.PlayerPreview = new PanelPositionConfig();
-
-                if (config.PanelPositions.MapSetup == null)
-                    config.PanelPositions.MapSetup = new PanelPositionConfig();
-
-                if (config.PanelPositions.SettingsSearch == null)
-                    config.PanelPositions.SettingsSearch = new PanelPositionConfig();
-
-                if (config.PanelPositions.QuestPlanner == null)
-                    config.PanelPositions.QuestPlanner = new PanelPositionConfig();
+                config.PanelPositions.GeneralSettings ??= new PanelPositionConfig();
+                config.PanelPositions.LootSettings ??= new PanelPositionConfig();
+                config.PanelPositions.MemoryWriting ??= new PanelPositionConfig();
+                config.PanelPositions.ESP ??= new PanelPositionConfig();
+                config.PanelPositions.LootFilter ??= new PanelPositionConfig();
+                config.PanelPositions.PlayerPreview ??= new PanelPositionConfig();
+                config.PanelPositions.MapSetup ??= new PanelPositionConfig();
+                config.PanelPositions.SettingsSearch ??= new PanelPositionConfig();
+                config.PanelPositions.QuestPlanner ??= new PanelPositionConfig();
             }
 
             if (config.ExpanderStates != null)
             {
-                if (config.ExpanderStates.ExpanderStates == null)
-                    config.ExpanderStates.ExpanderStates = new Dictionary<string, bool>();
+                config.ExpanderStates.ExpanderStates ??= [];
             }
 
             if (config.PlayerTypeSettings != null)
             {
-                if (config.PlayerTypeSettings.Settings == null)
-                    config.PlayerTypeSettings.Settings = new Dictionary<string, PlayerTypeSettings>();
-
+                config.PlayerTypeSettings.Settings ??= [];
                 config.PlayerTypeSettings.InitializeDefaults();
             }
 
             if (config.EntityTypeSettings != null)
             {
-                if (config.EntityTypeSettings.Settings == null)
-                    config.EntityTypeSettings.Settings = new Dictionary<string, EntityTypeSettings>();
-
+                config.EntityTypeSettings.Settings ??= [];
                 config.EntityTypeSettings.InitializeDefaults();
             }
 
             if (config.QuestHelper != null)
             {
-                if (config.QuestHelper.BlacklistedQuests == null)
-                    config.QuestHelper.BlacklistedQuests = new HashSet<string>();
+                config.QuestHelper.BlacklistedQuests ??= [];
             }
 
             if (config.MemWrites != null)
             {
-                if (config.MemWrites.Aimbot == null)
-                    config.MemWrites.Aimbot = new AimbotConfig();
-
-                if (config.MemWrites.WideLean == null)
-                    config.MemWrites.WideLean = new WideLeanConfig();
+                config.MemWrites.Aimbot ??= new AimbotConfig();
+                config.MemWrites.WideLean ??= new WideLeanConfig();
 
                 if (config.MemWrites.Aimbot != null)
                 {
-                    if (config.MemWrites.Aimbot.SilentAim == null)
-                        config.MemWrites.Aimbot.SilentAim = new SilentAimConfig();
-
-                    if (config.MemWrites.Aimbot.RandomBone == null)
-                        config.MemWrites.Aimbot.RandomBone = new AimbotRandomBoneConfig();
+                    config.MemWrites.Aimbot.SilentAim ??= new SilentAimConfig();
+                    config.MemWrites.Aimbot.RandomBone ??= new AimbotRandomBoneConfig();
                 }
             }
 
             if (config.ESP != null)
             {
-                if (config.ESP.Colors == null)
-                    config.ESP.Colors = EspColorOptions.GetDefaultColors();
-
-                if (config.ESP.Crosshair == null)
-                    config.ESP.Crosshair = new ESPCrosshairOptions();
-
-                if (config.ESP.MiniRadar == null)
-                    config.ESP.MiniRadar = new ESPMiniRadarOptions();
-
-                if (config.ESP.PlayerTypeESPSettings == null)
-                    config.ESP.PlayerTypeESPSettings = new PlayerTypeSettingsESPConfig();
-
-                if (config.ESP.EntityTypeESPSettings == null)
-                    config.ESP.EntityTypeESPSettings = new EntityTypeSettingsESPConfig();
+                config.ESP.Colors ??= EspColorOptions.GetDefaultColors();
+                config.ESP.Crosshair ??= new ESPCrosshairOptions();
+                config.ESP.MiniRadar ??= new ESPMiniRadarOptions();
+                config.ESP.PlayerTypeESPSettings ??= new PlayerTypeSettingsESPConfig();
+                config.ESP.EntityTypeESPSettings ??= new EntityTypeSettingsESPConfig();
 
                 if (config.ESP.PlayerTypeESPSettings != null)
                 {
-                    if (config.ESP.PlayerTypeESPSettings.Settings == null)
-                        config.ESP.PlayerTypeESPSettings.Settings = new Dictionary<string, PlayerTypeSettingsESP>();
-
+                    config.ESP.PlayerTypeESPSettings.Settings ??= [];
                     config.ESP.PlayerTypeESPSettings.InitializeDefaults();
                 }
 
                 if (config.ESP.EntityTypeESPSettings != null)
                 {
-                    if (config.ESP.EntityTypeESPSettings.Settings == null)
-                        config.ESP.EntityTypeESPSettings.Settings = new Dictionary<string, EntityTypeSettingsESP>();
-
+                    config.ESP.EntityTypeESPSettings.Settings ??= [];
                     config.ESP.EntityTypeESPSettings.InitializeDefaults();
                 }
             }
@@ -981,8 +911,7 @@ namespace eft_dma_radar.UI.Misc
 
             if (config.Containers != null)
             {
-                if (config.Containers.Selected == null)
-                    config.Containers.Selected = new List<string>();
+                config.Containers.Selected ??= new List<string>();
             }
         }
 
@@ -1014,13 +943,7 @@ namespace eft_dma_radar.UI.Misc
         {
             try
             {
-                var options = new JsonSerializerOptions
-                {
-                    WriteIndented = true,
-                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-                };
-
-                var json = JsonSerializer.Serialize(config, options);
+                var json = JsonSerializer.Serialize(config, _saveOptions);
 
                 var configFile = new FileInfo(Path.Combine(Program.CustomConfigPath.FullName, config.Filename));
                 var tempFile = new FileInfo(Path.Combine(Program.CustomConfigPath.FullName, config.Filename + ".tmp"));
@@ -1185,7 +1108,7 @@ namespace eft_dma_radar.UI.Misc
         [JsonPropertyName("visible")]
         public bool Visible { get; set; }
 
-        public static PanelPositionConfig FromPanel(FrameworkElement panel, Canvas canvas)
+        public static PanelPositionConfig FromPanel(FrameworkElement panel)
         {
             var left = Canvas.GetLeft(panel);
             var top = Canvas.GetTop(panel);
@@ -1203,7 +1126,7 @@ namespace eft_dma_radar.UI.Misc
             };
         }
 
-        public void ApplyToPanel(FrameworkElement panel, Canvas canvas)
+        public void ApplyToPanel(FrameworkElement panel)
         {
             if (Left >= 0 && Top >= 0)
             {
@@ -2846,4 +2769,4 @@ namespace eft_dma_radar.UI.Misc
         public bool KappaFilter { get; set; } = false;
 
     }
-}
+} // end namespace eft_dma_radar.UI.Misc

@@ -174,7 +174,7 @@
                                             Content="Upload Font (.ttf / .otf)"
                                             Style="{StaticResource ButtonPrimary}"
                                             HorizontalAlignment="Left"
-                                            Click="btnUploadFont_Click"
+                                            Click="BtnUploadFont_Click"
                                             ToolTip="Browse for a .ttf or .otf font file to add to the fonts/ folder"/>
 
                                     <!-- Remove button -->
@@ -183,7 +183,7 @@
                                             Style="{StaticResource ButtonDanger}"
                                             HorizontalAlignment="Left"
                                             Margin="0,6,0,0"
-                                            Click="btnRemoveFont_Click"
+                                            Click="BtnRemoveFont_Click"
                                             ToolTip="Delete the selected font from the fonts/ folder and revert to default"/>
 
                                 </hc:SimpleStackPanel>

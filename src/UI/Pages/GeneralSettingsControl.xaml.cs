@@ -74,11 +74,11 @@ namespace eft_dma_radar.UI.Pages
         public ObservableCollection<QuestListItem> QuestItems { get; } = new();
 
         public ObservableCollection<HotkeyActionModel> AvailableHotkeyActions { get; } = new();
-        private readonly Dictionary<string, List<int>> _actionKeyMappings = new();
-        private readonly Dictionary<int, string> _actionIdToKeyMap = new();
-        private ObservableCollection<HotkeyDisplayModel> _hotkeyList = new();
-        private readonly Dictionary<string, bool> _toggleStates = new();
-        private readonly Dictionary<string, DateTime> _lastExecutionTime = new();
+        private readonly Dictionary<string, List<int>> _actionKeyMappings = [];
+        private readonly Dictionary<int, string> _actionIdToKeyMap = [];
+        private readonly ObservableCollection<HotkeyDisplayModel> _hotkeyList = [];
+        private readonly Dictionary<string, bool> _toggleStates = [];
+        private readonly Dictionary<string, DateTime> _lastExecutionTime = [];
         private const int HOTKEY_COOLDOWN_MS = 50; // Prevent spam
         private bool _keyInputBoxIsCapturing = false;
 
@@ -89,7 +89,7 @@ namespace eft_dma_radar.UI.Pages
         private bool _suppressApiEvents = false;
 
         private PopupWindow _openColorPicker;
-        private Dictionary<string, SolidColorBrush> _brushFields = new Dictionary<string, SolidColorBrush>();
+        private readonly Dictionary<string, SolidColorBrush> _brushFields = [];
 
         private static Config Config => Program.Config;
 
@@ -99,14 +99,14 @@ namespace eft_dma_radar.UI.Pages
         private bool _isLoadingSettingAndWidgets = false;
         private bool _isLoadingEntitySettings = false;
 
-        private MainWindow mainWindow => MainWindow.Window;
+        private static MainWindow MainWindowInstance => MainWindow.Window;
 
         // ── Font picker ───────────────────────────────────────────────────────
         private static readonly string FontFolder =
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "fonts");
 
-        private readonly string[] _availableInformation = new string[]
-        {
+        private readonly string[] _availableInformation =
+        [
             "ADS",
             "Ammo Type",
             "Distance",
@@ -122,10 +122,10 @@ namespace eft_dma_radar.UI.Pages
             "UBGL",
             "Value",
             "Weapon"
-        };
+        ];
 
-        private readonly string[] _availableWidgets = new string[]
-        {
+        private readonly string[] _availableWidgets =
+        [
             "Aimview Widget",
             "Debug Widget",
             "Player Info Widget",
@@ -133,21 +133,21 @@ namespace eft_dma_radar.UI.Pages
             "Quest Info Widget",
             "Quest Planner Widget",
             "HotKey Info Widget"
-        };
+        ];
 
-        private readonly string[] _availableGeneralOptions = new string[]
-        {
+        private readonly string[] _availableGeneralOptions =
+        [
             "Connect Groups",
             "Mask Names",
             "Players on Top"
-        };
+        ];
 
-        private readonly string[] _availableEntityInformation = new string[]
-        {
+        private readonly string[] _availableEntityInformation =
+        [
             "Name",
             "Distance",
             "Value"
-        };
+        ];
         #endregion
 
         public GeneralSettingsControl()
@@ -211,7 +211,7 @@ namespace eft_dma_radar.UI.Pages
         private void RegisterPanelEvents()
         {
             // Header close button
-            btnCloseHeader.Click += btnCloseHeader_Click;
+            btnCloseHeader.Click += BtnCloseHeader_Click;
 
             // Drag handling
             DragHandle.MouseLeftButtonDown += DragHandle_MouseLeftButtonDown;
@@ -299,12 +299,8 @@ namespace eft_dma_radar.UI.Pages
                                 PropertyNameCaseInsensitive = true
                             };
 
-                            importedConfig = JsonSerializer.Deserialize<Config>(clipboardText, options);
-
-                            if (importedConfig == null)
-                            {
-                                throw new InvalidOperationException("Deserialized config is null");
-                            }
+                            importedConfig = JsonSerializer.Deserialize<Config>(clipboardText, options)
+                                ?? throw new InvalidOperationException("Deserialized config is null");
 
                             Log.WriteLine("[Config] Configuration deserialized successfully");
                         }
@@ -454,7 +450,7 @@ namespace eft_dma_radar.UI.Pages
             }
         }
 
-        private void RefreshContainerData()
+        private static void RefreshContainerData()
         {
             try
             {
@@ -485,7 +481,7 @@ namespace eft_dma_radar.UI.Pages
             }
         }
 
-        private void UpdateFeatureInstances()
+        private static void UpdateFeatureInstances()
         {
             try
             {
@@ -505,7 +501,7 @@ namespace eft_dma_radar.UI.Pages
         #endregion
 
         #region Events
-        private void btnCloseHeader_Click(object sender, RoutedEventArgs e)
+        private void BtnCloseHeader_Click(object sender, RoutedEventArgs e)
         {
             _openColorPicker?.Close();
             CloseRequested?.Invoke(this, EventArgs.Empty);
@@ -581,7 +577,7 @@ namespace eft_dma_radar.UI.Pages
             }
         }
 
-        private void btnForceOffsetsUpdate_Click(object sender, RoutedEventArgs e)
+        private void BtnForceOffsetsUpdate_Click(object sender, RoutedEventArgs e)
         {
             NotificationsShared.Info("IL2CPP offsets update started...");
             Task.Run(Il2CppDumper.ForceRedump);
@@ -612,15 +608,15 @@ namespace eft_dma_radar.UI.Pages
             // General Options
             chkMapSetup.Checked += GeneralCheckbox_Checked;
             chkMapSetup.Unchecked += GeneralCheckbox_Checked;
-            btnForceOffsetsUpdate.Click += btnForceOffsetsUpdate_Click;
-            ccbWidgets.SelectionChanged += widgetsCheckComboBox_SelectionChanged;
-            ccbGeneralOptions.SelectionChanged += generalOptionsCheckComboBox_SelectionChanged;
+            btnForceOffsetsUpdate.Click += BtnForceOffsetsUpdate_Click;
+            ccbWidgets.SelectionChanged += WidgetsCheckComboBox_SelectionChanged;
+            ccbGeneralOptions.SelectionChanged += GeneralOptionsCheckComboBox_SelectionChanged;
 
             nudFPSLimit.ValueChanged += GeneralNUD_ValueChanged;
             sldrUIScale.ValueChanged += GeneralSlider_ValueChanged;
 
             // Player Information
-            cboPlayerType.SelectionChanged += cboPlayerType_SelectionChanged;
+            cboPlayerType.SelectionChanged += CboPlayerType_SelectionChanged;
             chkHeightIndicator.Checked += GeneralCheckbox_Checked;
             chkHeightIndicator.Unchecked += GeneralCheckbox_Checked;
             chkImportantIndicator.Checked += GeneralCheckbox_Checked;
@@ -631,13 +627,13 @@ namespace eft_dma_radar.UI.Pages
             chkShowImportantPlayerLoot.Unchecked += GeneralCheckbox_Checked;
             sldrPlayerTypeRenderDistance.ValueChanged += GeneralSlider_ValueChanged;
             sldrPlayerTypeAimlineLength.ValueChanged += GeneralSlider_ValueChanged;
-            ccbInformation.SelectionChanged += playerInfoCheckComboBox_SelectionChanged;
+            ccbInformation.SelectionChanged += PlayerInfoCheckComboBox_SelectionChanged;
             sldrMinimumKD.ValueChanged += GeneralSlider_ValueChanged;
 
             // Entity Information
-            cboEntityType.SelectionChanged += cboEntityType_SelectionChanged;
+            cboEntityType.SelectionChanged += CboEntityType_SelectionChanged;
             sldrEntityTypeRenderDistance.ValueChanged += GeneralSlider_ValueChanged;
-            ccbEntityInformation.SelectionChanged += entityInfoCheckComboBox_SelectionChanged;
+            ccbEntityInformation.SelectionChanged += EntityInfoCheckComboBox_SelectionChanged;
             chkShowImportantCorpseLoot.Checked += GeneralCheckbox_Checked;
             chkShowImportantCorpseLoot.Unchecked += GeneralCheckbox_Checked;
             chkExplosiveRadius.Checked += GeneralCheckbox_Checked;
@@ -653,7 +649,7 @@ namespace eft_dma_radar.UI.Pages
 
             // Monitor
             cboMonitor.SelectionChanged += GeneralComboBox_SelectionChanged;
-            btnRefreshMonitors.Click += btnRefreshMonitors_Click;
+            btnRefreshMonitors.Click += BtnRefreshMonitors_Click;
             txtGameWidth.TextChanged += GeneralTextbox_TextChanged;
             txtGameHeight.TextChanged += GeneralTextbox_TextChanged;
 
@@ -670,19 +666,19 @@ namespace eft_dma_radar.UI.Pages
             chkKillZones.Unchecked += GeneralCheckbox_Checked;
 
             // Web Radar Server
-            btnWebRadarStart.Click += btnWebRadarStart_Click;
+            btnWebRadarStart.Click += BtnWebRadarStart_Click;
             chkWebRadarUPnP.Checked += GeneralCheckbox_Checked;
             chkWebRadarUPnP.Unchecked += GeneralCheckbox_Checked;
-            lblWebRadarLink.MouseLeftButtonUp += lblWebRadarLink_MouseLeftButtonUp;
+            lblWebRadarLink.MouseLeftButtonUp += LblWebRadarLink_MouseLeftButtonUp;
             txtWebRadarPort.TextChanged += GeneralTextbox_TextChanged;
 
 
             // Player API Service
             rdbTarkovDev.Checked += GeneralRadioButton_Checked;
             rdbEftApiTech.Checked += GeneralRadioButton_Checked;
-            btnCreateApiFile.Click += btnCreateApiFile_Click;
-            btnOpenApiFolder.Click += btnOpenApiFolder_Click;
-            btnClearApiFile.Click += btnClearApiFile_Click;
+            btnCreateApiFile.Click += BtnCreateApiFile_Click;
+            btnOpenApiFolder.Click += BtnOpenApiFolder_Click;
+            btnClearApiFile.Click += BtnClearApiFile_Click;
         }
 
         private void LoadGeneralSettings()
@@ -733,7 +729,7 @@ namespace eft_dma_radar.UI.Pages
 
             var playerTypeItems = new List<ComboBoxItem>();
 
-            foreach (PlayerType type in Enum.GetValues(typeof(PlayerType)))
+            foreach (PlayerType type in Enum.GetValues<PlayerType>())
             {
                 if (type != PlayerType.Default)
                 {
@@ -749,9 +745,9 @@ namespace eft_dma_radar.UI.Pages
                 }
             }
 
-            playerTypeItems.Add(new ComboBoxItem { Content = "Aimbot Locked", Tag = "AimbotLocked" });
-            playerTypeItems.Add(new ComboBoxItem { Content = "Focused", Tag = "Focused" });
-            playerTypeItems.Add(new ComboBoxItem { Content = "LocalPlayer", Tag = "LocalPlayer" });
+            playerTypeItems.Add(new() { Content = "Aimbot Locked", Tag = "AimbotLocked" });
+            playerTypeItems.Add(new() { Content = "Focused", Tag = "Focused" });
+            playerTypeItems.Add(new() { Content = "LocalPlayer", Tag = "LocalPlayer" });
             playerTypeItems.Sort((x, y) => string.Compare(x.Content.ToString(), y.Content.ToString()));
 
             foreach (var item in playerTypeItems)
@@ -785,22 +781,22 @@ namespace eft_dma_radar.UI.Pages
 
             var entityTypeItems = new List<ComboBoxItem>
             {
-                new ComboBoxItem { Content = "Static Container", Tag = "StaticContainer" },
-                new ComboBoxItem { Content = "Corpse", Tag = "Corpse" },
-                new ComboBoxItem { Content = "Regular Loot", Tag = "RegularLoot" },
-                new ComboBoxItem { Content = "Important Loot", Tag = "ImportantLoot" },
-                new ComboBoxItem { Content = "Quest Item", Tag = "QuestItem" },
-                new ComboBoxItem { Content = "Quest Zone", Tag = "QuestZone" },
-                new ComboBoxItem { Content = "Switch", Tag = "Switch" },
-                new ComboBoxItem { Content = "Transit", Tag = "Transit" },
-                new ComboBoxItem { Content = "Exfil", Tag = "Exfil" },
-                new ComboBoxItem { Content = "Door", Tag = "Door" },
-                new ComboBoxItem { Content = "Grenade", Tag = "Grenade" },
-                new ComboBoxItem { Content = "Tripwire", Tag = "Tripwire" },
-                new ComboBoxItem { Content = "Mine", Tag = "Mine" },
-                new ComboBoxItem { Content = "Mortar Projectile", Tag = "MortarProjectile" },
-                new ComboBoxItem { Content = "Airdrop", Tag = "Airdrop" },
-                new ComboBoxItem { Content = "BTR", Tag = "BTR" }
+                new() { Content = "Static Container", Tag = "StaticContainer" },
+                new() { Content = "Corpse", Tag = "Corpse" },
+                new() { Content = "Regular Loot", Tag = "RegularLoot" },
+                new() { Content = "Important Loot", Tag = "ImportantLoot" },
+                new() { Content = "Quest Item", Tag = "QuestItem" },
+                new() { Content = "Quest Zone", Tag = "QuestZone" },
+                new() { Content = "Switch", Tag = "Switch" },
+                new() { Content = "Transit", Tag = "Transit" },
+                new() { Content = "Exfil", Tag = "Exfil" },
+                new() { Content = "Door", Tag = "Door" },
+                new() { Content = "Grenade", Tag = "Grenade" },
+                new() { Content = "Tripwire", Tag = "Tripwire" },
+                new() { Content = "Mine", Tag = "Mine" },
+                new() { Content = "Mortar Projectile", Tag = "MortarProjectile" },
+                new() { Content = "Airdrop", Tag = "Airdrop" },
+                new() { Content = "BTR", Tag = "BTR" }
             };
 
             entityTypeItems.Sort((x, y) => string.Compare(x.Content.ToString(), y.Content.ToString()));
@@ -1660,7 +1656,7 @@ namespace eft_dma_radar.UI.Pages
             }
         }
 
-        private void lblWebRadarLink_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        private void LblWebRadarLink_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
             var link = lblWebRadarLink.Text;
 
@@ -1674,7 +1670,7 @@ namespace eft_dma_radar.UI.Pages
             catch { }
         }
 
-        private async void btnWebRadarStart_Click(object sender, RoutedEventArgs e)
+        private async void BtnWebRadarStart_Click(object sender, RoutedEventArgs e)
         {
             if (WebRadarServer.IsRunning)
             {
@@ -1758,13 +1754,13 @@ namespace eft_dma_radar.UI.Pages
             }
         }
 
-        private void btnRefreshMonitors_Click(object sender, RoutedEventArgs e)
+        private void BtnRefreshMonitors_Click(object sender, RoutedEventArgs e)
         {
             InitMonitors();
         }
 
 
-        private async void btnCreateApiFile_Click(object sender, RoutedEventArgs e)
+        private async void BtnCreateApiFile_Click(object sender, RoutedEventArgs e)
         {
             btnCreateApiFile.IsEnabled = false;
 
@@ -1810,7 +1806,7 @@ namespace eft_dma_radar.UI.Pages
         }
 
 
-        private void btnOpenApiFolder_Click(object sender, RoutedEventArgs e)
+        private void BtnOpenApiFolder_Click(object sender, RoutedEventArgs e)
         {
             try
             {
@@ -1824,7 +1820,7 @@ namespace eft_dma_radar.UI.Pages
             }
         }
 
-        private void btnClearApiFile_Click(object sender, RoutedEventArgs e)
+        private void BtnClearApiFile_Click(object sender, RoutedEventArgs e)
         {
             try
             {
@@ -1840,7 +1836,7 @@ namespace eft_dma_radar.UI.Pages
             }
         }
 
-        private void widgetsCheckComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void WidgetsCheckComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_isLoadingSettingAndWidgets)
                 return;
@@ -1878,7 +1874,7 @@ namespace eft_dma_radar.UI.Pages
             Log.WriteLine("Saved widget settings");
         }
 
-        private void generalOptionsCheckComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void GeneralOptionsCheckComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_isLoadingSettingAndWidgets)
                 return;
@@ -1906,7 +1902,7 @@ namespace eft_dma_radar.UI.Pages
             Log.WriteLine("Saved general options settings");
         }
 
-        private void cboPlayerType_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void CboPlayerType_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (cboPlayerType.SelectedItem is ComboBoxItem item)
             {
@@ -1917,13 +1913,13 @@ namespace eft_dma_radar.UI.Pages
             }
         }
 
-        private void playerInfoCheckComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void PlayerInfoCheckComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             SavePlayerTypeSettings();
             UpdatePlayerInformationControlsVisibility();
         }
 
-        private void cboEntityType_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void CboEntityType_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (cboEntityType.SelectedItem is ComboBoxItem item)
             {
@@ -1934,7 +1930,7 @@ namespace eft_dma_radar.UI.Pages
             }
         }
 
-        private void entityInfoCheckComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void EntityInfoCheckComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             SaveEntityTypeSettings();
         }
@@ -1948,7 +1944,7 @@ namespace eft_dma_radar.UI.Pages
         {
             if (cmbFontSelector == null) return;
 
-            cmbFontSelector.SelectionChanged -= cmbFontSelector_SelectionChanged;
+            cmbFontSelector.SelectionChanged -= CmbFontSelector_SelectionChanged;
             cmbFontSelector.Items.Clear();
 
             Directory.CreateDirectory(FontFolder);
@@ -1979,7 +1975,7 @@ namespace eft_dma_radar.UI.Pages
             }
 
             cmbFontSelector.SelectedIndex = idx;
-            cmbFontSelector.SelectionChanged += cmbFontSelector_SelectionChanged;
+            cmbFontSelector.SelectionChanged += CmbFontSelector_SelectionChanged;
 
             // Apply on startup
             if (idx == 0)
@@ -1988,7 +1984,7 @@ namespace eft_dma_radar.UI.Pages
                 ApplyFont(name);
         }
 
-        private void cmbFontSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void CmbFontSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (!cmbFontSelector.IsEnabled) return;
 
@@ -2008,7 +2004,7 @@ namespace eft_dma_radar.UI.Pages
             }
         }
 
-        private void btnUploadFont_Click(object sender, RoutedEventArgs e)
+        private void BtnUploadFont_Click(object sender, RoutedEventArgs e)
         {
             var dialog = new Microsoft.Win32.OpenFileDialog
             {
@@ -2051,7 +2047,7 @@ namespace eft_dma_radar.UI.Pages
             }
         }
 
-        private void btnRemoveFont_Click(object sender, RoutedEventArgs e)
+        private void BtnRemoveFont_Click(object sender, RoutedEventArgs e)
         {
             if (cmbFontSelector.SelectedItem is not string fontName
                 || !cmbFontSelector.IsEnabled
@@ -2589,10 +2585,10 @@ namespace eft_dma_radar.UI.Pages
 
         private void RegisterHotkeyEvents()
         {
-            btnAddHotkey.Click += btnAddHotkey_Click;
-            btnRemoveHotkey.Click += btnRemoveHotkey_Click;
+            btnAddHotkey.Click += BtnAddHotkey_Click;
+            btnRemoveHotkey.Click += BtnRemoveHotkey_Click;
 
-            cboAction.PreviewKeyDown += cboAction_PreviewKeyDown;
+            cboAction.PreviewKeyDown += CboAction_PreviewKeyDown;
             keyInputBox.CapturingStateChanged += KeyInputBox_CapturingStateChanged;
         }
         private void KeyInputBox_CapturingStateChanged(object sender, bool isCapturing)
@@ -2600,7 +2596,7 @@ namespace eft_dma_radar.UI.Pages
             _keyInputBoxIsCapturing = isCapturing;
         }
 
-        private void cboAction_PreviewKeyDown(object sender, KeyEventArgs e)
+        private void CboAction_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (_keyInputBoxIsCapturing)
                 e.Handled = true;
@@ -2760,7 +2756,7 @@ namespace eft_dma_radar.UI.Pages
             return "None";
         }
 
-        private string GetKeyName(Key key)
+        private static string GetKeyName(Key key)
         {
             if (key >= Key.D0 && key <= Key.D9)
                 return (key - Key.D0).ToString();
@@ -2875,7 +2871,7 @@ namespace eft_dma_radar.UI.Pages
             }
         }
 
-        private bool IsContinuousAction(string actionKey)
+        private static bool IsContinuousAction(string actionKey)
         {
             return actionKey switch
             {
@@ -2887,12 +2883,12 @@ namespace eft_dma_radar.UI.Pages
             };
         }
 
-        private string SplitCamelCase(string input)
+        private static string SplitCamelCase(string input)
         {
             return Regex.Replace(input, "([a-z])([A-Z])", "$1 $2");
         }
 
-        private IEnumerable<(string ActionKey, HotkeyEntry Entry)> GetAllHotkeys()
+        private static IEnumerable<(string ActionKey, HotkeyEntry Entry)> GetAllHotkeys()
         {
             var config = Config.HotKeys;
             var props = typeof(HotkeyConfig).GetProperties();
@@ -2911,6 +2907,7 @@ namespace eft_dma_radar.UI.Pages
 
         private void ExecuteHotkeyAction(string actionKey, bool isActive)
         {
+            var mainWindow = MainWindowInstance;
             switch (actionKey)
             {
                 #region Testing
@@ -3167,7 +3164,7 @@ namespace eft_dma_radar.UI.Pages
             }
         }
 
-        private void SetWideLeanDirection(WideLean.EWideLeanDirection dir)
+        private static void SetWideLeanDirection(WideLean.EWideLeanDirection dir)
         {
             if (!Config.MemWrites.WideLean.Enabled)
             {
@@ -3189,7 +3186,7 @@ namespace eft_dma_radar.UI.Pages
         #endregion
 
         #region Events
-        private void btnAddHotkey_Click(object sender, RoutedEventArgs e)
+        private void BtnAddHotkey_Click(object sender, RoutedEventArgs e)
         {
             if (cboAction.SelectedValue is string actionKey &&
                 cboAction.SelectedItem is HotkeyActionModel actionModel)
@@ -3240,7 +3237,7 @@ namespace eft_dma_radar.UI.Pages
             }
         }
 
-        private void btnRemoveHotkey_Click(object sender, RoutedEventArgs e)
+        private void BtnRemoveHotkey_Click(object sender, RoutedEventArgs e)
         {
             if (hotkeyListView.SelectedItem is HotkeyDisplayModel selected)
             {
@@ -3295,7 +3292,7 @@ namespace eft_dma_radar.UI.Pages
 
             await Dispatcher.InvokeAsync(() =>
             {
-                mainWindow.UpdateWindowTitle(Path.GetFileNameWithoutExtension(ConfigManager.CurrentConfigName));
+                MainWindowInstance.UpdateWindowTitle(Path.GetFileNameWithoutExtension(ConfigManager.CurrentConfigName));
             });
         }
         private void RefreshConfigList()
@@ -3360,7 +3357,7 @@ namespace eft_dma_radar.UI.Pages
                     await ApplyNewConfig();
 
                     txtCurrentConfig.Text = Path.GetFileNameWithoutExtension(ConfigManager.CurrentConfigName);
-                    mainWindow.UpdateWindowTitle(txtCurrentConfig.Text);
+                    MainWindowInstance.UpdateWindowTitle(txtCurrentConfig.Text);
                     RefreshConfigList();
 
                     NotificationsShared.Success($"Loaded '{selectedConfigName}' successfully!");
@@ -3565,7 +3562,14 @@ namespace eft_dma_radar.UI.Pages
             ExportConfigToClipboard();
         }
 
-        private void ExportConfigToClipboard()
+        private static readonly JsonSerializerOptions _exportOptions = new()
+        {
+            WriteIndented = true,
+            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        };
+
+        private static void ExportConfigToClipboard()
         {
             try
             {
@@ -3580,14 +3584,7 @@ namespace eft_dma_radar.UI.Pages
                 configForExport.Cache = null;
                 configForExport.WebRadar = null;
 
-                var options = new JsonSerializerOptions
-                {
-                    WriteIndented = true,
-                    Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-                };
-
-                var jsonData = JsonSerializer.Serialize(configForExport, options);
+                var jsonData = JsonSerializer.Serialize(configForExport, _exportOptions);
                 Clipboard.SetText(jsonData);
 
                 NotificationsShared.Success("[Config] Configuration exported to clipboard successfully! (Cache and WebRadar settings excluded)");
@@ -3599,6 +3596,13 @@ namespace eft_dma_radar.UI.Pages
                 NotificationsShared.Error($"[Config] Export error: {ex.Message}");
             }
         }
+
+        private static readonly JsonSerializerOptions _importOptions = new()
+        {
+            PropertyNameCaseInsensitive = true,
+            ReadCommentHandling = JsonCommentHandling.Skip,
+            AllowTrailingCommas = true
+        };
 
         private async void BtnImportClipboard_Click(object sender, RoutedEventArgs e)
         {
@@ -3639,14 +3643,7 @@ namespace eft_dma_radar.UI.Pages
 
                 await Task.Run(() =>
                 {
-                    var options = new JsonSerializerOptions
-                    {
-                        PropertyNameCaseInsensitive = true,
-                        ReadCommentHandling = JsonCommentHandling.Skip,
-                        AllowTrailingCommas = true
-                    };
-
-                    importedConfig = JsonSerializer.Deserialize<Config>(clipboardText, options);
+                    importedConfig = JsonSerializer.Deserialize<Config>(clipboardText, _importOptions);
                 });
 
                 if (importedConfig == null)

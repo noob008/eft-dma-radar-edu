@@ -2328,7 +2328,7 @@ namespace eft_dma_radar
 
                         if (posConfig != null)
                         {
-                            posConfig.ApplyToPanel(panelInfo.Panel, panelInfo.Canvas);
+                            posConfig.ApplyToPanel(panelInfo.Panel);
                         }
                         else
                         {
@@ -2497,7 +2497,7 @@ namespace eft_dma_radar
                     var propInfo = typeof(PanelPositionsConfig).GetProperty(panel.Key);
                     if (propInfo != null)
                     {
-                        var posConfig = PanelPositionConfig.FromPanel(panel.Value.Panel, panel.Value.Canvas);
+                        var posConfig = PanelPositionConfig.FromPanel(panel.Value.Panel);
                         propInfo.SetValue(Config.PanelPositions, posConfig);
                     }
                 }
@@ -2520,7 +2520,7 @@ namespace eft_dma_radar
                     var propInfo = typeof(PanelPositionsConfig).GetProperty(panelKey);
                     if (propInfo != null)
                     {
-                        var posConfig = PanelPositionConfig.FromPanel(panelInfo.Panel, panelInfo.Canvas);
+                        var posConfig = PanelPositionConfig.FromPanel(panelInfo.Panel);
                         propInfo.SetValue(Config.PanelPositions, posConfig);
                     }
                 }
@@ -2545,7 +2545,7 @@ namespace eft_dma_radar
 
                         if (posConfig != null)
                         {
-                            posConfig.ApplyToPanel(panel.Value.Panel, panel.Value.Canvas);
+                            posConfig.ApplyToPanel(panel.Value.Panel);
                             EnsurePanelInBounds(panel.Value.Panel, mainContentGrid, adjustSize: false);
                         }
                         else
