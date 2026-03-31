@@ -1,4 +1,4 @@
-﻿using eft_dma_radar;
+using eft_dma_radar;
 using eft_dma_radar.Tarkov.EFTPlayer.Plugins;
 using eft_dma_radar.Tarkov.Features.MemoryWrites;
 using eft_dma_radar.UI;
@@ -246,16 +246,16 @@ public static class ConfigManager
             var json = JsonSerializer.Serialize(CurrentConfig, options);
             var configToSave = JsonSerializer.Deserialize<Config>(json, options);
 
-            if (configToSave is null)
-                return false;
+if (configToSave is null)
+    return false;
 
-            configToSave.Filename = configName;
+configToSave.Filename = configName;
             configToSave.ConfigName = Path.GetFileNameWithoutExtension(configName);
 
             var filePath = Path.Combine(CustomConfigDirectory, configName);
             SafeSaveConfig(configToSave, filePath);
 
-            Log.WriteLine($"[Config] Saved new config: {configName}");
+Log.WriteLine($"[Config] Saved new config: {configName}");
             return true;
         }
         catch (Exception ex)
@@ -653,6 +653,14 @@ namespace eft_dma_radar.UI.Misc
         /// </summary>
         [JsonIgnore]
         public string Filename { get; set; } = "config-eft-v3.json";
+
+        /// <summary>
+        /// The name of the currently selected custom font (without extension).
+        /// Loaded from the fonts/ folder next to the executable.
+        /// </summary>
+        [JsonInclude]
+        [JsonPropertyName("fontName")]
+        public string FontName { get; set; } = string.Empty;
 
         /// <summary>
         /// The eft profile service, false if wanting tarkov.dev, true if wanting eft-api.tech

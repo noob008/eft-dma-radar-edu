@@ -1,13 +1,13 @@
-# Lone's EFT DMA Radar
+# Lex's EFT DMA Radar Fork
 
 ### Currently Maintained by Keeegi
 
-<img width="512" height="512" alt="image" src="https://github.com/user-attachments/assets/e2bb2567-539c-43c7-87c5-1ffe59e97d4d" />
+Please note
 
 ## What is this?
 - This is an up-to-date build of Lone DMA EFT Radar. This is a standalone copy of the software with *No Restrictions*.
 
-## How do I start using this?
+## How do I start
 1. Download & extract the solution
 2. Open solution with visual studio
 3. Publish the `eft-dma-radar` project
